@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PLEITOS - Novo Registro de Audiência e Eventos</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        vinho: {
+                            50: '#fef2f3',
+                            100: '#fde2e4',
+                            700: '#b91c1c',
+                            800: '#9b0102',
+                            900: '#450f0f',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        input[type="radio"].radio-vinho { accent-color: #9b0102; }
+        input[type="radio"].radio-verde { accent-color: #16a34a; }
+        input[type="radio"].radio-vermelho { accent-color: #dc2626; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-800 min-h-screen flex items-center justify-center p-2 overflow-x-hidden" onclick="fecharTodosDropdowns(event)">
+
+    <div id="predictive-bg" style="position: fixed; inset: 0; z-index: 0; pointer-events: none; width: 100vw; height: 100vh; background: #030303;">
+        <canvas id="predictive-canvas" style="display: block; width: 100%; height: 100%;"></canvas>
+    </div>
+
+    <script>
+        (() => {
+            const canvas = document.getElementById('predictive-canvas');
+            if (!canvas) return;
+            const gl = canvas.getContext('webgl', { alpha: false, antialias: false, depth: false });
+            if (!gl) return;
+
+            const vertexSource = `attribute vec2 a_pos; void main(){ gl_Position = vec4(a_pos, 0.0, 1.0); }`;
+            const fragmentSource = `
+                precision mediump float;
+                uniform vec2 uRes;
+                uniform float uTime, uDpr, uCell, uDot;
+                uniform float uPeak, uHeight, uThick, uFall;
+                uniform vec3 uBg, uBase, uAccent, uHigh;
+                uniform vec2 uMouse;
+                uniform float uMouseRadius, uMouseStrength;
+
+                void main(){
+                    float cellSize = max(uCell, 2.0);
+                    vec2 cellIndex = floor(gl_FragCoord.xy / cellSize);
+                    vec2 cellCenter = (cellIndex + 0.5) * cellSize;
+                    float x = cellCenter.x / uDpr;
+                    float y = (uRes.y - cellCenter.y) / uDpr;
+                    float width = uRes.x / uDpr;
+                    float height = uRes.y / uDpr;
+                    float normalizedX = (x - width * 0.5) / (width * 0.75);
+                    float curveY = height * uPeak + normalizedX * normalizedX * (height * uHeight);
+                    float mouseDistance = x - uMouse.x;
+                    float influence = uMouseStrength * exp(-(mouseDistance * mouseDistance) / (2.0 * uMouseRadius * uMouseRadius + 1.0));
+                    curveY = mix(curveY, uMouse.y, influence);
+                    float distanceToCurve = abs(y - curveY);
+                    float thickness = (140.0 + (1.0 - abs(normalizedX)) * 80.0) * uThick;
+                    vec3 color = uBg;
+
+                    if (distanceToCurve < thickness) {
+                        float intensity = 1.0 - distanceToCurve / thickness;
+                        float waveX = sin(x * 0.015 + uTime);
+                        float waveY = cos(y * 0.02 + uTime);
+                        intensity = intensity * 0.7 + waveX * waveY * 0.3 * intensity;
+                        intensity *= max(0.0, 1.0 - pow(abs(normalizedX), uFall));
+
+                        if (intensity > 0.02) {
+                            float side = uDot * intensity * uDpr;
+                            vec2 distanceToCell = abs(gl_FragCoord.xy - cellCenter);
+                            float coverage = 1.0 - smoothstep(side * 0.5 - 1.0, side * 0.5 + 1.0, max(distanceToCell.x, distanceToCell.y));
+                            vec3 ink = mix(uBase, uAccent, clamp(pow(intensity, 1.1), 0.0, 1.0));
+                            ink = mix(ink, uHigh, smoothstep(0.72, 1.0, intensity));
+                            color = mix(uBg, ink, coverage * clamp(intensity * 1.6, 0.0, 1.0));
+                        }
+                    }
+
+                    gl_FragColor = vec4(color, 1.0);
+                }`;
+
+            function compileShader(type, source) {
+                const shader = gl.createShader(type);
+                gl.shaderSource(shader, source);
+                gl.compileShader(shader);
+                return shader;
+            }
+
+            const vertexShader = compileShader(gl.VERTEX_SHADER, vertexSource);
+            const fragmentShader = compileShader(gl.FRAGMENT_SHADER, fragmentSource);
+            const program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+            gl.useProgram(program);
+
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+            const position = gl.getAttribLocation(program, 'a_pos');
+            gl.enableVertexAttribArray(position);
+            gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+
+            const uniformLocations = {};
+            const uniform = name => uniformLocations[name] || (uniformLocations[name] = gl.getUniformLocation(program, name));
+            let mouseX = 0;
+            let mouseY = 0;
+            let mouseActive = 0;
+
+            window.addEventListener('pointermove', event => {
+                const rect = canvas.getBoundingClientRect();
+                mouseX = event.clientX - rect.left;
+                mouseY = rect.height - (event.clientY - rect.top);
+                mouseActive = 1;
+            });
+
+            let lastTime = performance.now();
+            let clock = 0;
+
+            function render(now) {
+                const delta = Math.min(0.05, (now - lastTime) / 1000);
+                lastTime = now;
+                clock += delta * 1.8;
+
+                const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                const bufferWidth = Math.max(1, Math.round(window.innerWidth * dpr));
+                const bufferHeight = Math.max(1, Math.round(window.innerHeight * dpr));
+                if (canvas.width !== bufferWidth || canvas.height !== bufferHeight) {
+                    canvas.width = bufferWidth;
+                    canvas.height = bufferHeight;
+                }
+                gl.viewport(0, 0, bufferWidth, bufferHeight);
+
+                const pitch = Math.min(bufferWidth, bufferHeight) / dpr / 78;
+                gl.uniform2f(uniform('uRes'), bufferWidth, bufferHeight);
+                gl.uniform1f(uniform('uTime'), clock);
+                gl.uniform1f(uniform('uDpr'), dpr);
+                gl.uniform1f(uniform('uCell'), Math.max(2, pitch * dpr));
+                gl.uniform1f(uniform('uDot'), pitch * 1.2 * 1.02);
+                gl.uniform1f(uniform('uPeak'), 1.0);
+                gl.uniform1f(uniform('uHeight'), 0.0);
+                gl.uniform1f(uniform('uThick'), 2.06);
+                gl.uniform1f(uniform('uFall'), 6.0);
+                gl.uniform2f(uniform('uMouse'), mouseX * dpr, mouseY * dpr);
+                gl.uniform1f(uniform('uMouseRadius'), 236);
+                gl.uniform1f(uniform('uMouseStrength'), 0.34 * mouseActive);
+                gl.uniform3f(uniform('uBg'), 0.012, 0.012, 0.012);
+                gl.uniform3f(uniform('uBase'), 0.271, 0.059, 0.059);
+                gl.uniform3f(uniform('uAccent'), 0.608, 0.004, 0.008);
+                gl.uniform3f(uniform('uHigh'), 0.85, 0.18, 0.18);
+                gl.drawArrays(gl.TRIANGLES, 0, 3);
+                requestAnimationFrame(render);
+            }
+
+            requestAnimationFrame(render);
+        })();
+    </script>
+
+    <div id="appContainer" class="relative z-10 w-[1366px] h-[768px] bg-slate-100 flex flex-col rounded-xl shadow-2xl overflow-hidden transition-all duration-300 transform origin-center">
+        
+        <!-- CABEÇALHO DO SISTEMA -->
+        <header class="text-white h-14 px-4 flex items-center justify-between shadow-md shrink-0 select-none"
+            style="background: linear-gradient(90deg, #9b0102, #450f0f);">
+            <div class="flex items-center gap-6">
+                <!-- LOGOMARCA ATUALIZADA COM O LINK DIRETO -->
+                <div class="flex items-center">
+                    <img src="https://i.ibb.co/2Hw2FRW/Sem-t-tulo.png" alt="PLEITOS - Sistema de Gestão de Pleitos" class="h-12 w-auto object-contain">
+                </div>
+                <nav class="hidden lg:flex items-center gap-1">
+                    <button class="px-2 py-1 rounded text-[11px] font-semibold uppercase tracking-wider hover:bg-white/10 transition-colors flex items-center gap-1.5"><i class="fa-solid fa-house"></i> Home <i class="fa-solid fa-chevron-down text-[9px] opacity-70"></i></button>
+                    <button class="px-2 py-1 rounded text-[11px] font-semibold uppercase tracking-wider hover:bg-white/10 transition-colors flex items-center gap-1.5"><i class="fa-solid fa-database"></i> Cadastros <i class="fa-solid fa-chevron-down text-[9px] opacity-70"></i></button>
+                    <button class="px-2 py-1 rounded text-[11px] font-semibold uppercase tracking-wider hover:bg-white/10 transition-colors flex items-center gap-1.5"><i class="fa-solid fa-building-columns"></i> Institucional <i class="fa-solid fa-chevron-down text-[9px] opacity-70"></i></button>
+                    <button class="px-2 py-1 rounded text-[11px] font-semibold uppercase tracking-wider bg-white/15 transition-colors flex items-center gap-1.5"><i class="fa-solid fa-calendar-days"></i> Audiência e Eventos <i class="fa-solid fa-chevron-down text-[9px] opacity-70"></i></button>
+                    <button class="px-2 py-1 rounded text-[11px] font-semibold uppercase tracking-wider hover:bg-white/10 transition-colors flex items-center gap-1.5"><i class="fa-solid fa-briefcase"></i> Pleitos <i class="fa-solid fa-chevron-down text-[9px] opacity-70"></i></button>
+                    <button class="px-2 py-1 rounded text-[11px] font-semibold uppercase tracking-wider hover:bg-white/10 transition-colors flex items-center gap-1.5"><i class="fa-solid fa-chart-line"></i> Gestão <i class="fa-solid fa-chevron-down text-[9px] opacity-70"></i></button>
+                    <button class="px-2 py-1 rounded text-[11px] font-semibold uppercase tracking-wider hover:bg-white/10 transition-colors flex items-center gap-1.5"><i class="fa-solid fa-gear"></i> Configurações <i class="fa-solid fa-chevron-down text-[9px] opacity-70"></i></button>
+                </nav>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <button class="text-white/80 hover:text-white transition-colors relative mr-1">
+                    <i class="fa-solid fa-bell text-sm"></i>
+                    <span class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-600 text-[8px] font-bold rounded-full flex items-center justify-center border border-vinho-800">12</span>
+                </button>
+
+                <div class="bg-black/30 px-2 py-0.5 rounded-full flex items-center gap-2 border border-white/10">
+                    <div class="w-4 h-4 rounded-full bg-white text-vinho-800 font-extrabold text-[8px] flex items-center justify-center">VS</div>
+                    <span class="text-[11px] font-bold tracking-wide">Vinícius</span>
+                    <i class="fa-solid fa-chevron-down text-[8px] opacity-70"></i>
+                </div>
+            </div>
+        </header>
+
+        <!-- CONTEÚDO PRINCIPAL COM BARRA LATERAL ESQUERDA COMPACTA -->
+        <div class="flex-1 flex overflow-hidden p-2.5 gap-2.5">
+            
+            <!-- BARRA LATERAL ESQUERDA REDUZIDA E COMPACTA (6 ETAPAS) -->
+                <div class="w-52 bg-white rounded-lg shadow-sm border border-slate-200 flex flex-col shrink-0 overflow-hidden p-2.5 space-y-2.5 select-none">
+                <div>
+                    <h2 class="text-[9px] font-extrabold text-vinho-800 uppercase tracking-wider">Etapas do Processo</h2>
+                    <p class="text-[8px] text-slate-400">Fluxo de registro</p>
+                </div>
+
+                <!-- Lista das 6 Etapas Principais -->
+                <div class="space-y-1">
+                    <div class="p-1.5 rounded bg-slate-200 border border-slate-300 text-slate-700 font-bold text-[11px] cursor-pointer" onclick="mudarEtapa(1)" id="aba_etapa_1">
+                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-[9px] flex items-center justify-center font-black" id="circ_etapa_1"><i class="fa-solid fa-spinner"></i></div><span class="truncate">Dados Gerais e Atos</span></div>
+                    </div>
+                    <div class="p-1.5 rounded hover:bg-slate-50 text-slate-600 font-bold text-[11px] cursor-pointer transition-colors" onclick="mudarEtapa(6)" id="aba_etapa_6">
+                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-amber-50 text-amber-700 text-[9px] flex items-center justify-center font-black" id="circ_etapa_6"><i class="fa-solid fa-triangle-exclamation"></i></div><span class="truncate">Convocação & Convidados</span></div>
+                    </div>
+                    <div class="p-1.5 rounded hover:bg-slate-50 text-slate-600 font-bold text-[11px] cursor-pointer transition-colors" onclick="mudarEtapa(2)" id="aba_etapa_2">
+                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-amber-50 text-amber-700 text-[9px] flex items-center justify-center font-black" id="circ_etapa_2"><i class="fa-solid fa-triangle-exclamation"></i></div><span class="truncate">Coordenação</span></div>
+                    </div>
+                    <div class="p-1.5 rounded hover:bg-slate-50 text-slate-600 font-bold text-[11px] cursor-pointer transition-colors" onclick="mudarEtapa(3)" id="aba_etapa_3">
+                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-amber-50 text-amber-700 text-[9px] flex items-center justify-center font-black" id="circ_etapa_3"><i class="fa-solid fa-triangle-exclamation"></i></div><span class="truncate"> Cerimonial</span></div>
+                    </div>
+                    <div class="p-1.5 rounded hover:bg-slate-50 text-slate-600 font-bold text-[11px] cursor-pointer transition-colors" onclick="mudarEtapa(4)" id="aba_etapa_4">
+                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-amber-50 text-amber-700 text-[9px] flex items-center justify-center font-black" id="circ_etapa_4"><i class="fa-solid fa-triangle-exclamation"></i></div><span class="truncate">Validação Serin</span></div>
+                    </div>
+                    <div class="mt-3 pt-2 border-t border-slate-200 p-1.5 rounded hover:bg-slate-50 text-slate-600 font-bold text-[11px] cursor-pointer transition-colors" onclick="mudarEtapa(5)" id="aba_etapa_5">
+                        <div class="flex items-center gap-2"><div class="w-4 h-4" id="circ_etapa_5"></div><span class="truncate">Relatórios Gerenciais</span></div>
+                    </div>
+                </div>
+                <div class="mt-auto pt-2 pb-1 border-t border-slate-100 space-y-1 text-[8px] font-extrabold uppercase shrink-0 bg-white">
+                    <div class="text-slate-500 mb-1">Legenda de status</div>
+                    <div class="flex items-center gap-1.5 text-slate-700"><i class="fa-solid fa-spinner"></i><span class="bg-slate-200 border border-slate-300 rounded px-1.5 py-0.5">Em andamento</span></div>
+                    <div class="flex items-center gap-1.5 text-amber-700"><i class="fa-solid fa-triangle-exclamation"></i><span class="bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">Pendente</span></div>
+                    <div class="flex items-center gap-1.5 text-red-700"><i class="fa-solid fa-circle-exclamation"></i><span class="bg-red-50 border border-red-200 rounded px-1.5 py-0.5">Análise necessária</span></div>
+                    <div class="flex items-center gap-1.5 text-green-700"><i class="fa-solid fa-circle-check"></i><span class="bg-green-50 border border-green-200 rounded px-1.5 py-0.5">Concluído</span></div>
+                </div>
+            </div>
+            
+            <!-- COLUNA DO FORMULÁRIO PRINCIPAL -->
+            <div class="flex-1 bg-white rounded-lg shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+                
+                <div class="px-4 py-2 border-b border-slate-100 flex items-center gap-3 shrink-0 bg-slate-50/50">
+                    <button class="w-7 h-7 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-600 hover:bg-slate-100 transition-all">
+                        <i class="fa-solid fa-arrow-left text-[11px]"></i>
+                    </button>
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[9px] font-extrabold text-vinho-800 tracking-wider uppercase" id="subTopoLabel">Audiência e Eventos</span>
+                            <span class="text-slate-300">/</span>
+                            <span class="text-[9px] font-extrabold text-slate-500 tracking-wider uppercase" id="subtituloTopo">Novo Registro</span>
+                        </div>
+                        <h1 class="text-[11px] font-bold text-slate-600" id="tituloTopo">Cadastre ou gerencie audiências e eventos</h1>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-4 space-y-3">
+                    
+                    <!-- CONTEÚDO DA ETAPA 1 -->
+                    <div id="conteudo_etapa_1" class="space-y-3">
+                        <div id="alertaAnaliseNecessaria" class="hidden bg-red-50 border border-red-300 text-red-800 rounded-lg p-3 flex items-start gap-2">
+                            <i class="fa-solid fa-circle-exclamation mt-0.5"></i>
+                            <div class="text-[10px]">
+                                <strong class="block uppercase">Análise necessária</strong>
+                                <span id="textoAlertaAnalise">A SERIN solicitou análise.</span>
+                            </div>
+                        </div>
+                        <!-- EVENTO -->
+                        <div class="bg-slate-50/80 p-3 rounded-lg border border-slate-200 space-y-2">
+                            <span class="block text-[10px] font-extrabold text-vinho-800 uppercase tracking-wider">
+                                Evento <span class="text-slate-500 font-normal lowercase">(obrigatório)</span>
+                            </span>
+                            <div class="flex flex-wrap items-center gap-5 pt-1" role="radiogroup" aria-label="Tipo de evento" aria-required="true">
+                                <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 cursor-pointer">
+                                    <input type="radio" name="tipo_evento" value="visita_municipio" class="radio-vinho" required>
+                                    Visita ao município
+                                </label>
+                                <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 cursor-pointer">
+                                    <input type="radio" name="tipo_evento" value="ato_institucional" class="radio-vinho">
+                                    Ato Institucional
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- DADOS GERAIS -->
+                        <div class="space-y-2">
+                            <h3 class="text-[10px] font-extrabold text-vinho-800 uppercase tracking-wider">Dados Gerais</h3>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-2.5">
+                                <div>
+                                    <label class="block text-[9px] font-bold text-slate-600 mb-1">Assunto <span class="text-red-600">*</span></label>
+                                    <input type="text" placeholder="(Nome do Evento)" class="w-full bg-white border border-slate-300 rounded px-2.5 py-1 text-[11px] text-slate-700 focus:outline-none focus:border-vinho-800">
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] font-bold text-slate-600 mb-1">Município do Evento <span class="text-red-600">*</span></label>
+                                    <select id="select_municipio_evento" class="w-full bg-white border border-slate-300 rounded px-2.5 py-1 text-[11px] text-slate-700 focus:outline-none focus:border-vinho-800">
+                                        <option value="">Selecione o município</option>
+                                    </select>
+                                </div>
+                                <!-- CAMPO DE EQUIPE RESPONSÁVEL -->
+                                <div class="relative">
+                                    <label class="block text-[9px] font-bold text-slate-600 mb-1">Equipes Responsáveis <span class="text-red-600">*</span></label>
+                                    <button type="button" onclick="toggleDropdown(event, 'drop_equipe_responsavel')" class="w-full bg-white border border-slate-300 rounded px-2.5 py-1 text-[11px] text-left flex items-center justify-between text-slate-700 focus:outline-none focus:border-vinho-800 h-[26px]">
+                                        <span id="label_equipe_responsavel" class="truncate text-slate-400">Selecione as equipes</span>
+                                        <i class="fa-solid fa-chevron-down text-[8px] text-slate-400"></i>
+                                    </button>
+                                    <div id="drop_equipe_responsavel" class="hidden absolute left-0 top-full mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-xl z-40 p-2 space-y-1">
+    <div class="text-[8px] font-extrabold text-slate-400 uppercase px-1 pb-1 border-b">
+        Secretarias Selecionadas
+    </div>
+
+    <div id="lista_checkbox_equipes" class="space-y-1 pt-1">
+        <div class="text-[9px] text-slate-400 px-1">
+            Selecione primeiro as secretarias
+        </div>
+    </div>
+</div>
+
+
+                                    
+                                    
+                                    
+                                    <div id="drop_equipe_responsavel" class="hidden absolute left-0 top-full mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-xl z-40 p-2 space-y-1">
+                                        <div class="text-[8px] font-extrabold text-slate-400 uppercase px-1 pb-1 border-b">Equipes e Contatos</div>
+                                        <div class="space-y-1 pt-1">
+                                            <label class="flex items-center gap-1.5 px-1 py-1 hover:bg-slate-50 rounded cursor-pointer text-[10px] text-slate-700 font-medium">
+                                                <input type="checkbox" name="equipe_responsavel[]" value="Cerimonial" onchange="atualizarResumoEquipes()" class="radio-vinho" required> Cerimonial (Nome - Telefone)
+                                            </label>
+                                            <label class="flex items-center gap-1.5 px-1 py-1 hover:bg-slate-50 rounded cursor-pointer text-[10px] text-slate-700 font-medium">
+                                                <input type="checkbox" name="equipe_responsavel[]" value="SERIN" onchange="atualizarResumoEquipes()" class="radio-vinho"> SERIN (Nome - Telefone)
+                                            </label>
+                                            <label class="flex items-center gap-1.5 px-1 py-1 hover:bg-slate-50 rounded cursor-pointer text-[10px] text-slate-700 font-medium">
+                                                <input type="checkbox" name="equipe_responsavel[]" value="Casa Militar" onchange="atualizarResumoEquipes()" class="radio-vinho"> Casa Militar (Nome - Telefone)
+                                            </label>
+                                            <label class="flex items-center gap-1.5 px-1 py-1 hover:bg-slate-50 rounded cursor-pointer text-[10px] text-slate-700 font-medium">
+                                                <input type="checkbox" name="equipe_responsavel[]" value="Coordenação" onchange="atualizarResumoEquipes()" class="radio-vinho"> Coordenação (Nome - Telefone)
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- CAMPO: SECRETARIAS ENVOLVIDAS -->
+                                <div class="relative">
+                                    <label class="block text-[9px] font-bold text-slate-600 mb-1">Secretarias Envolvidas</label>
+                                    <button type="button" onclick="toggleDropdown(event, 'drop_secretarias_envolvidas')" class="w-full bg-white border border-slate-300 rounded px-2.5 py-1 text-[11px] text-left flex items-center justify-between text-slate-700 focus:outline-none focus:border-vinho-800 h-[26px]">
+                                        <span id="label_secretarias_envolvidas" class="truncate text-slate-400">Selecione as secretarias</span>
+                                        <i class="fa-solid fa-chevron-down text-[8px] text-slate-400"></i>
+                                    </button>
+                                    <div id="drop_secretarias_envolvidas" class="hidden absolute left-0 top-full mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-xl z-40 p-2 space-y-1 max-h-48 overflow-y-auto">
+                                        <div class="text-[8px] font-extrabold text-slate-400 uppercase px-1 pb-1 border-b">Lista de Secretarias</div>
+                                        <div id="lista_checkbox_secretarias" class="space-y-1 pt-1">
+                                            <!-- Preenchido via script em ordem alfabética estrita -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-2.5">
+                                <div>
+                                    <label class="block text-[9px] font-bold text-slate-600 mb-1">Data <span class="text-red-600">*</span></label>
+                                    <input type="date" class="w-full bg-white border border-slate-300 rounded px-2.5 py-1 text-[11px] text-slate-700 focus:outline-none focus:border-vinho-800">
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] font-bold text-slate-600 mb-1">Hora <span class="text-red-600">*</span></label>
+                                    <input type="time" class="w-full bg-white border border-slate-300 rounded px-2.5 py-1 text-[11px] text-slate-700 focus:outline-none focus:border-vinho-800">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-[9px] font-bold text-slate-600 mb-1">Local</label>
+                                    <div class="flex items-center gap-1">
+                                        <input type="text" placeholder="Informe o local do evento" class="flex-1 bg-white border border-slate-300 rounded px-2.5 py-1 text-[11px] text-slate-700 focus:outline-none focus:border-vinho-800">
+                                        <button type="button" onclick="inserirMaisUmLocal(this)" class="w-7 h-[26px] bg-vinho-800 hover:bg-vinho-900 text-white rounded flex items-center justify-center transition-colors shrink-0" title="Adicionar mais um local">
+                                            <i class="fa-solid fa-plus text-[10px]"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-[9px] font-bold text-slate-600 mb-1">Status <span class="text-red-600">*</span></label>
+                                    <select class="w-full bg-white border border-slate-300 rounded px-2.5 py-1 text-[11px] text-slate-700 focus:outline-none focus:border-vinho-800">
+                                        <option>Agendado</option>
+                                        <option>Realizado</option>
+                                        <option>Cancelado</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ATOS -->
+                        <div class="space-y-2 pt-1">
+                            <div class="flex items-center gap-2">
+                                <h3 class="text-[10px] font-extrabold text-vinho-800 uppercase tracking-wider">Atos (Investimentos Programados na Agenda)</h3>
+                                <i class="fa-solid fa-circle-info text-slate-400 text-[11px]"></i>
+                            </div>
+
+                            <div class="border border-slate-200 rounded-lg overflow-x-auto">
+                                <table class="w-full text-left text-[11px] border-collapse min-w-[950px]">
+                                    <thead>
+                                        <tr class="bg-slate-50 text-[9px] font-extrabold text-slate-500 uppercase border-b border-slate-200">
+                                            <th class="p-1.5 text-center w-7">#</th>
+                                            <th class="p-1.5 w-28"/th>
+                                            <th class="p-1.5 w-[160px]">Ação</th>
+                                            <th class="p-1.5 w-20">Teto Orçamentário</th>
+                                            <th class="p-1.5 w-24">Secretaria</th>
+                                            <th class="p-1.5 w-24">Município</th>
+                                            <th class="p-1.5 w-20 text-center border-l">
+                                                <div class="mb-0.5 text-[8px] text-slate-600 font-extrabold">Validação</div>
+                                                <div class="flex justify-center gap-2 text-[9px] font-bold">
+                                                    <span class="text-green-600">SIM</span>
+                                                    <span class="text-red-600">NÃO</span>
+                                                </div>
+                                            </th>
+                                            <th id="th_foto_1" class="p-1.5 w-28 text-center hidden">Inclusão de Foto(s)</th>
+                                            <th id="th_just_1" class="p-1.5 w-24 hidden">Justificativa</th>
+                                            <th class="p-1.5 w-10 text-center">Excluir</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabela_atos_body" class="divide-y divide-slate-100 text-[10px]">
+                                        <!-- Preenchido via Script -->
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Botões de Ação da Tabela -->
+                            <div class="flex items-center gap-2.5 pt-0.5">
+                                <button type="button" onclick="incluirNovoAto()" class="bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-bold px-2.5 py-1 rounded text-[11px] flex items-center gap-1">
+                                    <i class="fa-solid fa-plus"></i> INCLUIR NOVO ATO
+                                </button>
+                                <button type="button" onclick="finalizarAtos()" class="bg-vinho-800 hover:bg-vinho-900 text-white font-bold px-3 py-1 rounded text-[11px] shadow-sm">
+                                    FINALIZAR ATOS
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CONTEÚDO DA ETAPA 2 (COORDENAÇÃO) -->
+                    <div id="conteudo_etapa_2" class="space-y-3 hidden">
+                        <div class="bg-white border border-slate-200 rounded-lg p-4 flex flex-col justify-between space-y-4">
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between border-b pb-2">
+                                    <h4 class="text-xs font-extrabold text-vinho-800 uppercase">Coordenação</h4>
+                                    <span class="bg-amber-100 text-amber-800 text-[9px] font-extrabold px-2 py-0.5 rounded uppercase">Pendente</span>
+                                </div>
+                                
+                                <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] text-slate-600 font-medium">
+                                    <i class="fa-solid fa-circle-info text-vinho-800 mr-1"></i>
+                                    <strong>Obs:</strong> Áudio, Notas Técnicas, relatórios e fotos da entrega.
+                                </div>
+                                <div class="mt-2">
+    <button type="button" onclick="(function(btn){ const container = btn.parentElement; const input = document.createElement('input'); input.type = 'text'; input.placeholder = 'Informe outro local'; input.className = 'w-full bg-white border border-slate-300 rounded px-2.5 py-1 text-[11px] text-slate-700 mt-2'; container.insertBefore(input, btn); })(this)" class="px-3 py-1 bg-[#581845] text-white rounded text-[11px] font-bold">+ Incluir</button>
+</div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div class="bg-amber-50 border border-amber-200 p-2.5 rounded-lg flex items-center justify-between shadow-sm">
+                                        <div class="flex items-center gap-2">
+                                            <i class="fa-solid fa-file-pdf text-amber-600 text-lg"></i>
+                                            <span class="text-[11px] font-bold text-amber-900">Anexar fotos, relatórios ou notas técnicas</span>
+                                        </div>
+                                         <div class="mt-2">
+    <button type="button" onclick="(function(btn){ const container = btn.parentElement; const input = document.createElement('input'); input.type = 'text'; input.placeholder = 'Informe outro local'; input.className = 'w-full bg-white border border-slate-300 rounded px-2.5 py-1 text-[11px] text-slate-700 mt-2'; container.insertBefore(input, btn); })(this)" class="px-3 py-1 bg-[#581845] text-white rounded text-[11px] font-bold">+ Incluir</button>
+</div>
+                                        <div>
+                                            <input type="file" id="inputFileCoordenação" class="hidden" onchange="atualizarNomeArquivoGenerico(this, 'nomeArquivoCoord')">
+                                            <button onclick="document.getElementById('inputFileCoordenação').click()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold px-3 py-1.5 rounded transition-all">Escolher arquivo</button>
+                                        </div>
+                                    </div> 
+                                    <div class="mt-2">
+    <button type="button" onclick="(function(btn){ const container = btn.parentElement; const input = document.createElement('input'); input.type = 'text'; input.placeholder = 'Informe outro local'; input.className = 'w-full bg-white border border-slate-300 rounded px-2.5 py-1 text-[11px] text-slate-700 mt-2'; container.insertBefore(input, btn); })(this)" class="px-3 py-1 bg-[#581845] text-white rounded text-[11px] font-bold">+ Incluir</button>
+</div>
+                                    <div class="bg-amber-50 border border-amber-200 p-2.5 rounded-lg flex items-center justify-between shadow-sm">
+                                        <div class="flex items-center gap-2">
+                                            <i class="fa-solid fa-microphone text-amber-600 text-lg"></i>
+                                            <span class="text-[11px] font-bold text-amber-900">Anexar Áudio</span>
+                                        </div>
+                                        <div>
+                                            <input type="file" id="inputAudioCoordenação" accept="audio/*" class="hidden" onchange="atualizarNomeArquivoGenerico(this, 'nomeAudioCoord')">
+                                            <button onclick="document.getElementById('inputAudioCoordenação').click()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold px-3 py-1.5 rounded transition-all">Escolher áudio</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="flex justify-between text-[10px] text-slate-500 px-1">
+                                    <span id="nomeArquivoCoord">Nenhum arquivo de documento selecionado</span>
+                                    <span id="nomeAudioCoord">Nenhum arquivo de áudio selecionado</span>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <label class="block text-[10px] font-bold text-slate-600">Parecer / Observações</label>
+                                    <input type="text" class="w-full bg-white border border-slate-300 rounded p-2 text-[11px]" placeholder="Informe o parecer ou observações (opcional)">
+                                </div>
+                            </div>
+
+                            <div class="pt-2">
+                                <button class="bg-vinho-800 hover:bg-vinho-900 text-white font-bold px-4 py-2 rounded text-[11px] shadow-sm transition-all">FINALIZAR ETAPA</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CONTEÚDO DA ETAPA 3 (RELATÓRIO CERIMONIAL) -->
+                    <div id="conteudo_etapa_3" class="space-y-3 hidden">
+                        <div class="bg-white border border-slate-200 rounded-lg p-4 flex flex-col justify-between space-y-4">
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between border-b pb-2">
+                                    <h4 class="text-xs font-extrabold text-vinho-800 uppercase">Relatório Cerimonial</h4>
+                                    <span class="bg-amber-100 text-amber-800 text-[9px] font-extrabold px-2 py-0.5 rounded uppercase">Pendente</span>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div class="bg-amber-50 border border-amber-200 p-2.5 rounded-lg flex items-center justify-between shadow-sm">
+                                        <div class="flex items-center gap-2">
+                                            <i class="fa-solid fa-file-pdf text-amber-600 text-lg"></i>
+                                            <span class="text-[11px] font-bold text-amber-900">Anexar fotos ou arquivos</span>
+                                        </div>
+                                        <div>
+                                            <input type="file" id="inputFileCerimonial" class="hidden" onchange="atualizarNomeArquivo(this)">
+                                            <button onclick="document.getElementById('inputFileCerimonial').click()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold px-3 py-1.5 rounded transition-all">Escolher arquivo</button>
+                                        </div>
+                                    </div>
+                                    <div class="bg-amber-50 border border-amber-200 p-2.5 rounded-lg flex items-center justify-between shadow-sm">
+                                        <div class="flex items-center gap-2">
+                                            <i class="fa-solid fa-microphone text-amber-600 text-lg"></i>
+                                            <span class="text-[11px] font-bold text-amber-900">Anexar Áudio</span>
+                                        </div>
+                                        <div>
+                                            <input type="file" id="inputAudioCerimonial" accept="audio/*" class="hidden" onchange="atualizarNomeArquivoGenerico(this, 'nomeAudioCerimonial')">
+                                            <button onclick="document.getElementById('inputAudioCerimonial').click()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold px-3 py-1.5 rounded transition-all">Escolher áudio</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="flex justify-between text-[10px] text-slate-500 px-1">
+                                    <span id="nomeArquivoSelecionado">Nenhum arquivo selecionado</span>
+                                    <span id="nomeAudioCerimonial">Nenhum áudio selecionado</span>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <label class="block text-[10px] font-bold text-slate-600">Parecer / Observações</label>
+                                    <input type="text" class="w-full bg-white border border-slate-300 rounded p-2 text-[11px]" placeholder="Informe o parecer ou observações (opcional)">
+                                </div>
+                            </div>
+
+                            <div class="pt-2">
+                                <button class="bg-vinho-800 hover:bg-vinho-900 text-white font-bold px-4 py-2 rounded text-[11px] shadow-sm transition-all">FINALIZAR ETAPA</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CONTEÚDO DA ETAPA 4 (VALIDAÇÃO SERIN) -->
+                    <div id="conteudo_etapa_4" class="space-y-3 hidden">
+                        <div class="bg-white border border-slate-200 rounded-lg p-4 flex flex-col justify-between space-y-4">
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between border-b pb-2">
+                                    <h4 class="text-xs font-extrabold text-vinho-800 uppercase">Validação Serin</h4>
+                                    <span id="statusValidacaoSerin" class="bg-amber-100 text-amber-800 text-[9px] font-extrabold px-2 py-0.5 rounded uppercase">Pendente</span>
+                                </div>
+                                <div class="flex gap-4 items-center">
+                                    <label class="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
+                                        <input type="radio" name="val_serin" value="validado" onclick="toggleMotivoPendencia(false)" class="radio-vinho text-vinho-800"> Validado
+                                    </label>
+                                    <label class="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
+                                        <input type="radio" name="val_serin" value="analise_necessaria" onclick="toggleMotivoPendencia(true)" class="radio-vinho text-vinho-800"> Análise necessária
+                                    </label>
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="block text-[10px] font-bold text-slate-600">Parecer / Observações </label>
+                                    <input type="text" class="w-full bg-white border border-slate-300 rounded p-2 text-[11px]" placeholder="Parecer / Observações (opcional)">
+                                </div>
+                                <div id="divMotivoPendencia" class="hidden space-y-1 bg-red-50/60 border border-red-200 rounded-lg p-2">
+                                    <label class="block text-[10px] font-bold text-red-600">Motivo da Análise Necessária *</label>
+                                    <input id="motivoAnaliseNecessaria" type="text" class="w-full bg-white border border-red-300 rounded p-2 text-[11px]" placeholder="Informe o motivo da análise necessária...">
+                                    <label class="block text-[10px] font-bold text-slate-600">Origem da análise necessária *</label>
+                                    <select id="origemAnaliseNecessaria" class="w-full bg-white border border-red-300 rounded p-2 text-[11px]">
+                                        <option value="">Selecione a etapa que precisa de análise</option>
+                                        <option value="1">Dados Gerais e Atos</option>
+                                        <option value="2">Coordenação</option>
+                                        <option value="3">Cerimonial</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="pt-2 flex items-center gap-2">
+                                <button type="button" onclick="cadastrarAnaliseNecessaria()" class="bg-red-500 hover:bg-red-600 text-white font-bold px-4 py-2 rounded text-[11px] shadow-sm transition-all flex items-center gap-1.5">
+                                    <i class="fa-solid fa-triangle-exclamation"></i> CADASTRAR ANÁLISE NECESSÁRIA
+                                </button>
+                                <button type="button" onclick="validarFinalizacaoEvento()" class="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 rounded text-[11px] shadow-sm transition-all">CONCLUIR EVENTO</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CONTEÚDO DA ETAPA 5: MÓDULO DE RELATÓRIOS GERENCIAIS -->
+                    <div id="conteudo_etapa_5" class="space-y-2 hidden">
+                        <div class="flex items-center justify-between bg-white border border-slate-200 rounded-lg p-2.5 px-3">
+                            <div>
+                                <span class="text-[9px] font-extrabold text-vinho-800 uppercase tracking-wider block">Dados de Auditoria</span>
+                                <h2 class="text-xs font-bold text-slate-700">Relatórios Gerenciais</h2>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+                            <div class="md:col-span-4 bg-white border border-slate-200 rounded-lg p-3 space-y-2">
+                                <span class="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Escolher Relatório</span>
+                                <div class="space-y-1.5">
+                                    <button onclick="mudarSubAbaEtapa5('participacao')" id="btn_sub_participacao" class="w-full text-left px-3 py-2 rounded-lg bg-vinho-800 text-white font-bold text-[11px] flex items-center justify-between shadow-sm transition-all">
+                                        <span class="flex items-center gap-2"><i class="fa-solid fa-users text-xs"></i> Participação</span>
+                                    </button>
+                                    <button onclick="mudarSubAbaEtapa5('credenciamento')" id="btn_sub_credenciamento" class="w-full text-left px-3 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium text-[11px] flex items-center justify-between transition-all">
+                                        <span class="flex items-center gap-2"><i class="fa-solid fa-qrcode text-xs text-slate-400"></i> Credenciamento</span>
+                                    </button>
+                                    <button onclick="mudarSubAbaEtapa5('controle_areas')" id="btn_sub_controle_areas" class="w-full text-left px-3 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium text-[11px] flex items-center justify-between transition-all">
+                                        <span class="flex items-center gap-2"><i class="fa-solid fa-circle-info text-xs text-slate-400"></i> Controle de Áreas</span>
+                                    </button>
+                                    <button onclick="mudarSubAbaEtapa5('documentacao')" id="btn_sub_documentacao" class="w-full text-left px-3 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium text-[11px] flex items-center justify-between transition-all">
+                                        <span class="flex items-center gap-2"><i class="fa-solid fa-file-lines text-xs text-slate-400"></i> Documentação</span>
+                                    </button>
+                                    <button onclick="mudarSubAbaEtapa5('auditoria')" id="btn_sub_auditoria" class="w-full text-left px-3 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium text-[11px] flex items-center justify-between transition-all">
+                                        <span class="flex items-center gap-2"><i class="fa-solid fa-shield text-xs text-slate-400"></i> Auditoria</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="md:col-span-8 bg-white border border-slate-200 rounded-lg p-4 flex flex-col justify-between min-h-[300px]">
+                                <div id="painel_sub_participacao" class="space-y-4">
+                                    <h3 class="text-xs font-bold text-slate-700 border-b pb-2">Métricas de Participação</h3>
+                                    <div class="grid grid-cols-3 gap-3">
+                                        <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center shadow-sm">
+                                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Convidados</span>
+                                            <span class="text-xl font-black text-slate-700">120</span>
+                                        </div>
+                                        <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center shadow-sm">
+                                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Confirmados</span>
+                                            <span class="text-xl font-black text-slate-700">85</span>
+                                        </div>
+                                        <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center shadow-sm">
+                                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Presentes</span>
+                                            <span class="text-xl font-black text-slate-700">79</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="painel_sub_credenciamento" class="space-y-4 hidden">
+                                    <h3 class="text-xs font-bold text-slate-700 border-b pb-2">Análise de Credenciamento</h3>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center shadow-sm">
+                                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">QR Codes Gerados</span>
+                                            <span class="text-xl font-black text-slate-700">85</span>
+                                        </div>
+                                        <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center shadow-sm">
+                                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">QR Codes Validados</span>
+                                            <span class="text-xl font-black text-slate-700">79</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="painel_sub_controle_areas" class="space-y-4 hidden">
+                                    <h3 class="text-xs font-bold text-slate-700 border-b pb-2">Distribuição de Espaço</h3>
+                                    <div class="grid grid-cols-3 gap-3">
+                                        <div class="bg-teal-600 text-white rounded-lg p-3 text-center shadow-sm">
+                                            <span class="text-[10px] font-bold uppercase tracking-wider block mb-1">Palco</span>
+                                            <span class="text-xl font-black">12</span>
+                                        </div>
+                                        <div class="bg-sky-500 text-white rounded-lg p-3 text-center shadow-sm">
+                                            <span class="text-[10px] font-bold uppercase tracking-wider block mb-1">Área Alpha</span>
+                                            <span class="text-xl font-black">34</span>
+                                        </div>
+                                        <div class="bg-amber-400 text-slate-900 rounded-lg p-3 text-center shadow-sm">
+                                            <span class="text-[10px] font-bold uppercase tracking-wider block mb-1">1ª Fileira</span>
+                                            <span class="text-xl font-black">15</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="painel_sub_documentacao" class="space-y-4 hidden">
+                                    <h3 class="text-xs font-bold text-slate-700 border-b pb-2">Análise Documental</h3>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center shadow-sm">
+                                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Ordens de Serviço Assinadas</span>
+                                            <span class="text-xl font-black text-emerald-600">08</span>
+                                        </div>
+                                        <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center shadow-sm">
+                                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Pendentes de Assinatura</span>
+                                            <span class="text-xl font-black text-red-600">01</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="painel_sub_auditoria" class="space-y-4 hidden">
+                                    <h3 class="text-xs font-bold text-slate-700 border-b pb-2">Logs e Responsabilidade</h3>
+                                    <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2 text-[11px] text-slate-700">
+                                        <div class="flex items-center gap-2">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-vinho-800"></span>
+                                            <span><strong>Vinícius (Chefia de Gabinete)</strong> validou OS Nº 2026/09 às 13:45.</span>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-vinho-800"></span>
+                                            <span><strong>Recepção Posto 01</strong> credenciou Deputado às 14:02.</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center justify-between border-t pt-3 mt-4">
+                                    <div class="flex items-center gap-2">
+                                        <button class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded text-[10px] flex items-center gap-1.5 shadow-sm transition-all">
+                                            <i class="fa-solid fa-file-excel"></i> Exportar Excel
+                                        </button>
+                                        <button class="bg-blue-800 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded text-[10px] flex items-center gap-1.5 shadow-sm transition-all">
+                                            <i class="fa-solid fa-file-excel"></i> Exportar Word
+                                        </button>
+                                        <button class="bg-red-600 hover:bg-red-700 text-white font-bold px-3 py-1.5 rounded text-[10px] flex items-center gap-1.5 shadow-sm transition-all">
+                                            <i class="fa-solid fa-file-pdf"></i> Exportar PDF
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CONTEÚDO DA ETAPA 6: CONVOCAÇÃO & CONVIDADOS -->
+                    <div id="conteudo_etapa_6" class="space-y-3 hidden">
+                        <div class="flex items-center justify-between bg-white border border-slate-200 rounded-lg p-2.5 px-3">
+                            <div>
+                                <span class="text-[9px] font-extrabold text-vinho-800 uppercase tracking-wider block">Motor de Decisões e APIs SGP</span>
+                                <h2 class="text-xs font-bold text-slate-700">2. Convocação, Gestão de Convidados e Decisões de Participação</h2>
+                            </div>
+                            <span class="bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-bold px-3 py-1 rounded shadow-sm">
+                                INTERATIVO (CLIQUE PARA TESTAR)
+                            </span>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+                            <div class="md:col-span-5 bg-white border border-slate-200 rounded-lg p-4 space-y-4 flex flex-col justify-between">
+                                <div class="space-y-3">
+                                    <div>
+                                        <span class="text-[9px] font-extrabold text-vinho-800 uppercase tracking-wider block mb-1">Perfil da Autoridade Convidada</span>
+                                        <p class="text-[10px] text-slate-500 leading-relaxed">Parlamentares, Lideranças e demais autoridades recebem convites dinâmicos.</p>
+                                    </div>
+
+                                    <div class="space-y-1.5">
+                                        <label class="block text-[9px] font-extrabold text-slate-600 uppercase">Confirmar Presença da Autoridade:</label>
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <button onclick="mudarSubTelaEtapa6('sim')" id="btn_sim_etapa6" class="px-3 py-2 rounded-lg bg-vinho-800 text-white font-bold text-[11px] shadow-sm transition-all text-center">
+                                                SIM (Participará)
+                                            </button>
+                                            <button onclick="mudarSubTelaEtapa6('nao')" id="btn_nao_etapa6" class="px-3 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-[11px] transition-all text-center">
+                                                NÃO (Ausência)
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div id="bloco_acao_inferior" class="pt-2 border-t border-slate-100 space-y-2">
+                                        <span class="inline-block bg-emerald-100 text-emerald-800 text-[9px] font-extrabold px-2 py-0.5 rounded uppercase">API Whatsapp Ativada</span>
+                                        <p class="text-[10px] text-slate-600 leading-normal"><strong>Ação Sistêmica:</strong> Envia mensagem instantânea via API de Whatsapp contendo dados e QR Code Único.</p>
+                                    </div>
+
+                                    <div id="bloco_ausencia_inferior" class="pt-2 border-t border-slate-100 space-y-2 hidden">
+                                        <span class="inline-block bg-amber-100 text-amber-800 text-[9px] font-extrabold px-2 py-0.5 rounded uppercase">Ação: Justificar ou Representar</span>
+                                        <p class="text-[10px] font-bold text-slate-700">A agenda contar&#225; com representante?</p>
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <button onclick="mudarSubTelaEtapa6('representante')" id="btn_rep_etapa6" class="px-2 py-1.5 rounded-lg bg-vinho-800 text-white font-bold text-[10px] shadow-sm transition-all text-center">
+                                                Sim, Terá Representante
+                                            </button>
+                                            <button onclick="mudarSubTelaEtapa6('justificar')" id="btn_jus_etapa6" class="px-2 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[10px] transition-all text-center">
+                                                Não, Justificar Ausência
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="text-[9px] text-slate-400 pt-2 border-t">
+                                    Módulo de Governança SGP v2.4
+                                </div>
+                            </div>
+
+                            <div class="md:col-span-7 bg-slate-50/50 border border-slate-200 rounded-lg p-4 flex items-center justify-center min-h-[340px]">
+                                <div id="tela_whatsapp" class="bg-white border border-slate-200 rounded-xl shadow-md w-full max-w-md overflow-hidden">
+                                    <div class="bg-emerald-800 text-white px-3 py-2 flex items-center justify-between text-[11px] font-bold">
+                                        <span class="flex items-center gap-1.5"><i class="fa-brands fa-whatsapp text-sm"></i> SERIN - Portal de Agendas</span>
+                                        <span class="text-[9px] font-normal opacity-80">Online</span>
+                                    </div>
+                                    <div class="p-4 space-y-3 bg-slate-50/50">
+                                        <div class="bg-white border border-slate-200 rounded-lg p-3 space-y-2 shadow-sm">
+                                            <span class="text-[10px] font-extrabold text-teal-800 block">Confirmação de Agenda</span>
+                                            <p class="text-[11px] font-bold text-slate-700">Olá! Sua presença está confirmada.</p>
+                                            <div class="space-y-1 text-[10px] text-slate-600 pt-1">
+                                                <p><strong>Evento:</strong> Lançamento do Programa Regional</p>
+                                                <p><strong>Local:</strong> Parque de Exposições</p>
+                                                <p><strong>Ponto Focal:</strong> Glauber</p>
+                                                <p><strong>Credencial:</strong> Anexo QR Code</p>
+                                            </div>
+                                            <div class="pt-2 flex justify-center">
+                                                <div class="bg-slate-900 text-white p-2 rounded flex items-center justify-center gap-1 font-mono text-[9px] font-bold tracking-widest">
+                                                    <i class="fa-solid fa-qrcode text-lg"></i> QR CODE SGP
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="tela_representante" class="bg-white border border-slate-200 rounded-xl shadow-md w-full max-w-md p-4 space-y-3 hidden">
+                                    <div class="flex items-center gap-1.5 border-b pb-2 text-vinho-800 font-extrabold text-xs">
+                                        <i class="fa-solid fa-user-pen"></i> Cadastro de Representante
+                                    </div>
+                                    <div class="space-y-2 text-[10px]">
+                                        <div>
+                                            <label class="block font-bold text-slate-500 mb-0.5">Nome Completo:</label>
+                                            <input type="text" value="Carlos Eduardo de Oliveira" readonly class="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 font-medium text-slate-700">
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <label class="block font-bold text-slate-500 mb-0.5">CPF:</label>
+                                                <input type="text" value="051.***.***-23" readonly class="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 font-medium text-slate-700">
+                                            </div>
+                                            <div>
+                                                <label class="block font-bold text-slate-500 mb-0.5">Telefone:</label>
+                                                <input type="text" value="(71) 99123-4567" readonly class="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 font-medium text-slate-700">
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label class="block font-bold text-slate-500 mb-0.5">Instituição:</label>
+                                            <input type="text" value="Assembleia Legislativa da Bahia" readonly class="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 font-medium text-slate-700">
+                                        </div>
+                                        <div>
+                                            <label class="block font-bold text-slate-500 mb-0.5">Instagram:</label>
+                                            <input type="text" value="@carlos_edu" readonly class="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 font-medium text-slate-700">
+                                        </div>
+                                    </div>
+                                    <div class="pt-1 flex items-center justify-between text-[9px]">
+                                        <span class="text-slate-400 font-medium"><i class="fa-solid fa-shield text-vinho-800 mr-1"></i> Conformidade com a LGPD (Lei nº 13.709/18)</span>
+                                        <span class="text-emerald-600 font-extrabold">Credencial gerada para o representante!</span>
+                                    </div>
+                                </div>
+
+                                <div id="tela_justificativa" class="bg-white border border-slate-200 rounded-xl shadow-md w-full max-w-md p-4 space-y-3 hidden">
+                                    <div class="flex items-center gap-1.5 border-b pb-2 text-amber-700 font-extrabold text-xs">
+                                        <i class="fa-solid fa-triangle-exclamation"></i> Registrar Justificativa
+                                    </div>
+                                    <div class="space-y-2 text-[10px]">
+                                        <div>
+                                            <label class="block font-bold text-slate-600 mb-1">Justificativa de Ausência:</label>
+                                            <textarea rows="3" readonly class="w-full bg-slate-50 border border-slate-300 rounded p-2 font-medium text-slate-700 resize-none">Viagem institucional em curso.</textarea>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-2 pt-1 border-t">
+                                            <div>
+                                                <span class="block font-bold text-slate-400 uppercase text-[8px]">Status:</span>
+                                                <span class="font-extrabold text-red-700 text-[11px]">Não Participará</span>
+                                            </div>
+                                            <div>
+                                                <span class="block font-bold text-slate-400 uppercase text-[8px]">Histórico:</span>
+                                                <span class="font-bold text-slate-700 text-[11px]">Ausência Gravada</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="px-4 py-2 border-t border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
+                    <button type="button" onclick="resetarTelaInicial()" class="bg-white hover:bg-slate-100 border border-slate-300 text-red-600 font-bold px-3 py-1 rounded text-[11px]">
+                        CANCELAR
+                    </button>
+                    <div class="flex gap-2">
+                        <button class="bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-bold px-3 py-1 rounded text-[11px]">
+                            SALVAR
+                        </button>
+                        <button disabled class="bg-slate-200 text-slate-400 font-bold px-3 py-1 rounded text-[11px] cursor-not-allowed">
+                            <i class="fa-solid fa-lock mr-1"></i> FINALIZAR
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <footer class="text-white/80 h-6 px-4 flex items-center justify-between text-[9px] shrink-0 border-t border-vinho-900"
+            style="background: linear-gradient(90deg, #6b0000, #000000);">
+            <p>Todos os direitos reservados © 2025-2026 Gestão de Pleitos</p>
+            <p>Versão 1.0.0</p>
+        </footer>
+    </div>
+
+    <!-- Scripts de Interatividade -->
+    <div id="modalAtosRegistrados" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-xl shadow-2xl border border-slate-200 p-5 text-center">
+            <div class="mx-auto mb-3 w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center">
+                <i class="fa-solid fa-check"></i>
+            </div>
+            <h2 id="tituloModalAtos" class="text-sm font-extrabold text-slate-800">Atos registrados com sucesso!</h2>
+            <p id="mensagemModalAtos" class="mt-1 text-xs text-slate-500">Os atos foram registrados nesta etapa.</p>
+            <button type="button" onclick="fecharModalAtos()" class="mt-4 bg-vinho-800 hover:bg-vinho-900 text-white font-bold px-4 py-1.5 rounded-lg text-xs">
+                OK
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const municipiosBahia = [
+            "Governo da Bahia", "Abaira", "Abare", "Acajutiba", "Adustina", "Agua Fria", "Aiquara", "Alagoinhas", "Alcobaca", "Almadina", "Amargosa", "Amelia Rodrigues", "America Dourada", "Anage", "Andarai", "Andorinha", "Angical", "Anguera", "Antas", "Antonio Cardoso", "Antonio Goncalves", "Apora", "Apuarema", "Aracas", "Aracatu", "Araci", "Aramari", "Arataca", "Aratuipe", "Aurelino Leal", "Baianopolis", "Baixa Grande", "Banzae", "Barra", "Barra da Estiva", "Barra do Choca", "Barra do Mendes", "Barra do Rocha", "Barreiras", "Barro Alto", "Barro Preto", "Barrocas", "Belmonte", "Belo Campo", "Biritinga", "Boa Nova", "Boa Vista do Tupim", "Bom Jesus da Lapa", "Bom Jesus da Serra", "Boninal", "Bonito", "Boquira", "Botupora", "Brejoes", "Brejolandia", "Brotas de Macaubas", "Brumado", "Buerarema", "Buritirama", "Caatiba", "Cabaceiras do Paraguacu", "Cachoeira", "Cacule", "Caem", "Caetanos", "Caetite", "Cafarnaum", "Cairu", "Caldeirao Grande", "Camacan", "Camacari", "Camamu", "Campo Alegre de Lourdes", "Campo Formoso", "Canapolis", "Canarana", "Canavieiras", "Candeal", "Candeias", "Candiba", "Candido Sales", "Cansancao", "Canudos", "Capela do Alto Alegre", "Capim Grosso", "Caraibas", "Caravelas", "Cardeal da Silva", "Carinhanha", "Casa Nova", "Castro Alves", "Catolandia", "Catu", "Caturama", "Central", "Chorrocho", "Cicero Dantas", "Cipo", "Coaraci", "Cocos", "Conceicao da Feira", "Conceicao do Almeida", "Conceicao do Coite", "Conceicao do Jacuipe", "Conde", "Condeuba", "Contendas do Sincora", "Coracao de Maria", "Cordeiros", "Coribe", "Coronel Joao Sa", "Correntina", "Cotegipe", "Cravolandia", "Crisopolis", "Cristopolis", "Cruz das Almas", "Curaca", "Dario Meira", "Dias d Avila", "Dom Basilio", "Dom Macedo Costa", "Elisio Medrado", "Encruzilhada", "Entre Rios", "Erico Cardoso", "Esplanada", "Euclides da Cunha", "Eunapolis", "Fatima", "Feira da Mata", "Feira de Santana", "Filadelfia", "Firmino Alves", "Floresta Azul", "Formosa do Rio Preto", "Gandu", "Gaviao", "Gentio do Ouro", "Gloria", "Gongogi", "Governador Mangabeira", "Guajeru", "Guanambi", "Guaratinga", "Heliopolis", "Iacu", "Ibiassuce", "Ibicarai", "Ibicoara", "Ibicui", "Ibipeba", "Ibipitanga", "Ibiquera", "Ibirapitanga", "Ibirapua", "Ibirataia", "Ibitiara", "Ibitita", "Ibotirama", "Ichu", "Igapora", "Igrapiuna", "Iguai", "Ilheus", "Inhambupe", "Ipecaeta", "Ipiau", "Ipira", "Ipupiara", "Irajuba", "Iramaia", "Iraquara", "Irara", "Irece", "Itabela", "Itaberaba", "Itabuna", "Itacare", "Itaete", "Itagi", "Itagiba", "Itagimirim", "Itaguacu da Bahia", "Itaju do Colonia", "Itajuipe", "Itamaraju", "Itamari", "Itambe", "Itanagra", "Itanhem", "Itaparica", "Itape", "Itapebi", "Itapetinga", "Itapicuru", "Itapitanga", "Itaquara", "Itarantim", "Itatim", "Itirucu", "Itiuba", "Itororo", "Ituacu", "Itubera", "Iuiu", "Jaborandi", "Jacaraci", "Jacobina", "Jaguaquara", "Jaguarari", "Jaguaripe", "Jandaira", "Jequie", "Jeremoabo", "Jiquirica", "Jitauna", "Joao Dourado", "Juazeiro", "Jucurucu", "Jussara", "Jussari", "Jussiape", "Lafaiete Coutinho", "Lagoa Real", "Laje", "Lajedao", "Lajedinho", "Lajedo do Tabocal", "Lamarao", "Lapao", "Lauro de Freitas", "Lencois", "Licinio de Almeida", "Livramento de Nossa Senhora", "Luis Eduardo Magalhaes", "Macajuba", "Macarani", "Macaubas", "Macurure", "Madre de Deus", "Maetinga", "Maiquinique", "Mairi", "Malhada", "Malhada de Pedras", "Manoel Vitorino", "Mansidao", "Maracas", "Maragogipe", "Marau", "Marcionilio Souza", "Mascote", "Mata de Sao Joao", "Matina", "Medeiros Neto", "Miguel Calmon", "Milagres", "Mirangaba", "Mirante", "Monte Santo", "Morpara", "Morro do Chapeu", "Mortugaba", "Mucuge", "Mucuri", "Mulungu do Morro", "Mundo Novo", "Muniz Ferreira", "Muquem de Sao Francisco", "Muritiba", "Mutuipe", "Nazare", "Nilo Pecanha", "Nordestina", "Nova Canaa", "Nova Fatima", "Nova Ibia", "Nova Itarana", "Nova Redencao", "Nova Soure", "Nova Vicosa", "Novo Horizonte", "Novo Triunfo", "Olindina", "Oliveira dos Brejinhos", "Ouricangas", "Ourolandia", "Palmas de Monte Alto", "Palmeiras", "Paramirim", "Paratinga", "Paripiranga", "Pau Brasil", "Paulo Afonso", "Pe de Serra", "Pedrao", "Pedro Alexandre", "Piata", "Pilao Arcado", "Pindai", "Pindobacu", "Pintadas", "Pirai do Norte", "Piripa", "Piritiba", "Planaltino", "Planalto", "Pocoes", "Pojuca", "Ponto Novo", "Porto Seguro", "Potiragua", "Prado", "Presidente Dutra", "Presidente Janio Quadros", "Presidente Tancredo Neves", "Queimadas", "Quijingue", "Quixabeira", "Rafael Jambeiro", "Remanso", "Retirolandia", "Riachao das Neves", "Riachao do Jacuipe", "Riacho de Santana", "Ribeira do Amparo", "Ribeira do Pombal", "Ribeirao do Largo", "Rio de Contas", "Rio do Antonio", "Rio do Pires", "Rio Real", "Rodelas", "Ruy Barbosa", "Salinas da Margarida", "Salvador", "Santa Barbara", "Santa Brigida", "Santa Cruz Cabralia", "Santa Cruz da Vitoria", "Santa Ines", "Santa Luzia", "Santa Maria da Vitoria", "Santa Rita de Cassia", "Santa Terezinha", "Santaluz", "Santana", "Santanopolis", "Santo Amaro", "Santo Antonio de Jesus", "Santo Estevao", "Sao Desiderio", "Sao Domingos", "Sao Felipe", "Sao Felix", "Sao Felix do Coribe", "Sao Francisco do Conde", "Sao Gabriel", "Sao Goncalo dos Campos", "Sao Jose da Vitoria", "Sao Jose do Jacuipe", "Sao Miguel das Matas", "Sao Sebastiao do Passe", "Sapeacu", "Satiro Dias", "Saubara", "Saude", "Seabra", "Sebastiao Laranjeiras", "Senhor do Bonfim", "Sento Se", "Serra do Ramalho", "Serra Dourada", "Serra Preta", "Serrinha", "Serrolandia", "Simoes Filho", "Sitio do Mato", "Sitio do Quinto", "Sobradinho", "Souto Soares", "Tabocas do Brejo Velho", "Tanhacu", "Tanque Novo", "Tanquinho", "Taperoa", "Tapiramuta", "Teixeira de Freitas", "Teodoro Sampaio", "Teofilandia", "Teolandia", "Terra Nova", "Tremedal", "Tucano", "Uaua", "Ubaira", "Ubaitaba", "Ubata", "Uibai", "Umburanas", "Una", "Urandi", "Urucuca", "Utinga", "Valenca", "Valente", "Varzea da Roca", "Varzea do Poco", "Varzea Nova", "Varzedo", "Vera Cruz", "Vereda", "Vitoria da Conquista", "Wagner", "Wanderley", "Wenceslau Guimaraes", "Xique-Xique"
+        ];
+
+        // Lista de secretarias rigorosamente ordenada em ordem alfabética
+        const listagemSecretarias = [
+            "AGERBA", "BAHIA SEM FOME", "CAR", "CASA CIVIL", "CBMBA", "CERB", "CONDER", 
+            "DETRAN", "DPT", "EMBASA", "GAB GOV", "GOV", "INEMA", "PCBA", "PMBA", "SAEB", 
+            "SDE", "SDH", "SEADES", "SEAGRI", "SEAP", "SEAS", "SEC", "SECOM", "SECTI", 
+            "SECULT", "SEDUR", "SEFAZ", "SEINFRA", "SEMA", "SEPLAN", "SEPROMI", "SERIN", 
+            "SESAB", "SETUR", "SETRE", "SJDH", "SIHS", "SPM", "SSP", "SUDEC", "SUDESB", "SUFOTUR"
+        ];
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const selectEvt = document.getElementById('select_municipio_evento');
+            if (selectEvt) {
+                municipiosBahia.forEach(mun => {
+                    const opt = document.createElement('option');
+                    opt.value = mun;
+                    opt.textContent = mun;
+                    selectEvt.appendChild(opt);
+                });
+            }
+
+            const containerSec = document.getElementById('lista_checkbox_secretarias');
+            if (containerSec) {
+                let htmlSec = '';
+                listagemSecretarias.forEach(sec => {
+                    htmlSec += `
+                        <label class="flex items-center gap-1.5 px-1 py-1 hover:bg-slate-50 rounded cursor-pointer text-[10px] text-slate-700 font-medium">
+                            <input type="checkbox" value="${sec}" onchange="atualizarResumoSecretarias()" class="rounded text-vinho-800 focus:ring-vinho-800"> ${sec}
+                        </label>
+                    `;
+                });
+                containerSec.innerHTML = htmlSec;
+            }
+
+            const tbodyAtos = document.getElementById('tabela_atos_body');
+            if (tbodyAtos) {
+                const atosOpcoes = [
+                    "Assina Autorização", "Assina Ordem de Serviço", "Assina Termo", "Assinatura", 
+                    "Autoriza Adotar as Providências", "Autoriza Assinar Contrato", "Autoriza Celebrar Convênio", 
+                    "Autoriza Deflagrar Processo Licitatório", "Entrega", "Estadualização", "Evento", 
+                    "Inaugura", "Lançamento", "Sobrevoo", "Visita"
+                ];
+                const secretariasOpcoes = ["CAR", "CONDER", "INEMA", "SEC", "SEINFRA", "SESAB", "SSP"];
+
+                let htmlAtos = '';
+                for(let i=1; i<=4; i++) {
+                    htmlAtos += `
+                    <tr>
+                        <td class="p-1.5 text-center font-bold text-slate-500">${i}</td>
+                        <td class="p-1.5">
+                            <select class="w-full bg-white border border-slate-300 rounded p-1 text-[10px] h-[26px]">
+                                <option value="">Selecione</option>
+                                ${atosOpcoes.map(a => `<option ${i===1 && a==='Inaugura'||i===2 && a==='Entrega'||i===3 && a==='Visita'||i===4 && a==='Assina Ordem de Serviço'?'selected':''}>${a}</option>`).join('')}
+                            </select>
+                        </td>
+                        <td class="p-1.5">
+                            <input type="text" class="w-full bg-white border border-slate-300 rounded p-1 text-[10px] h-[26px]" placeholder="Descreva a ação...">
+                        </td>
+                        <td class="p-1.5">
+                            <input type="text" class="w-full bg-white border border-slate-300 rounded p-1 text-[10px] h-[26px]" placeholder="R$">
+                        </td>
+                        <td class="p-1.5 relative">
+                            <div class="relative">
+                                <button type="button" onclick="toggleDropdown(event, 'drop_${i}')" class="w-full bg-white border border-slate-300 rounded p-1 text-[10px] h-[26px] text-left flex items-center justify-between text-slate-700 focus:outline-none focus:border-vinho-800">
+                                    <span id="label_drop_${i}" class="truncate">Selecione</span>
+                                    <i class="fa-solid fa-chevron-down text-[8px] text-slate-400"></i>
+                                </button>
+                                <div id="drop_${i}" class="hidden absolute left-0 top-full mt-1 w-44 bg-white border border-slate-200 rounded-lg shadow-xl z-30 p-2 space-y-1">
+                                    <div class="text-[8px] font-extrabold text-slate-400 uppercase px-1 pb-1 border-b">Selecione</div>
+                                    ${secretariasOpcoes.map(s => `
+                                        <label class="flex items-center gap-1.5 px-1 py-1 hover:bg-slate-50 rounded cursor-pointer text-[10px] text-slate-700 font-medium">
+                                            <input type="checkbox" value="${s}" onchange="atualizarResumoSec(${i})" class="rounded text-vinho-800 focus:ring-vinho-800"> ${s}
+                                        </label>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="p-1.5">
+                            <select class="w-full bg-white border border-slate-300 rounded p-1 text-[10px] h-[26px]">
+                                <option value="">Selecione o município</option>
+                                ${municipiosBahia.map(m => `<option ${i===1 && m==='Salvador'||i===2 && m==='Feira de Santana'||i===3 && m==='Camaçari'?'selected':''}>${m}</option>`).join('')}
+                            </select>
+                        </td>
+                        <td class="p-1.5 text-center border-l">
+                            <div class="flex justify-center items-center gap-3">
+                                <input type="radio" name="val_${i}" value="sim" onchange="tratarValidação(${i}, 'sim')" class="radio-verde text-green-600 focus:ring-green-500 cursor-pointer">
+                                <input type="radio" name="val_${i}" value="nao" onchange="tratarValidação(${i}, 'nao')" class="radio-vermelho text-red-600 focus:ring-red-500 cursor-pointer">
+                            </div>
+                        </td>
+                        <td id="td_foto_${i}" class="p-1.5 text-center hidden">
+                            <div class="flex items-center gap-2 justify-center">
+                                <div class="w-8 h-8 rounded-full bg-vinho-50 border border-vinho-200 flex items-center justify-center text-vinho-800 shadow-sm" title="Foto Ícone">
+                                    <i class="fa-solid fa-camera text-sm"></i>
+                                </div>
+                                <input type="file" id="file_upload_${i}" class="hidden" onchange="handleFileSelect(${i})">
+                                <button type="button" onclick="document.getElementById('file_upload_${i}').click()" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 shadow-sm" title="Carregar Arquivo">
+                                    <i class="fa-solid fa-upload text-vinho-800"></i>
+                                    <span id="file_label_${i}">Upload</span>
+                                </button>
+                            </div>
+                        </td>
+                        <td id="td_just_${i}" class="p-1.5 hidden">
+                            <input type="text" id="just_${i}" class="w-full bg-white border border-slate-300 rounded p-1 text-[10px] h-[26px]" placeholder="">
+                        </td>
+                        <td class="p-1.5 text-center">
+                            <button class="text-red-500 hover:text-red-700"><i class="fa-solid fa-trash-can text-[11px]"></i></button>
+                        </td>
+                    </tr>
+                    `;
+                }
+                tbodyAtos.innerHTML = htmlAtos;
+            }
+
+            resizeContainer();
+        });
+
+        function incluirNovoAto() {
+            const tbody = document.getElementById('tabela_atos_body');
+            const ultimaLinha = tbody?.lastElementChild;
+
+            if (!tbody || !ultimaLinha) return;
+
+            const novoNumero = tbody.children.length + 1;
+            const numeroAnterior = novoNumero - 1;
+            const novaLinha = ultimaLinha.cloneNode(true);
+
+            novaLinha.querySelector('td').textContent = novoNumero;
+            novaLinha.querySelectorAll('[id], [name], [onclick], [onchange]').forEach(elemento => {
+                ['id', 'name', 'onclick', 'onchange'].forEach(atributo => {
+                    const valor = elemento.getAttribute(atributo);
+                    if (valor) elemento.setAttribute(atributo, valor.replaceAll(String(numeroAnterior), String(novoNumero)));
+                });
+            });
+
+            novaLinha.querySelectorAll('input').forEach(input => {
+                input.checked = false;
+                input.value = input.type === 'radio' ? input.value : '';
+            });
+            novaLinha.querySelectorAll('select').forEach(select => {
+                select.selectedIndex = 0;
+            });
+            novaLinha.querySelectorAll('[id^="label_drop_"]').forEach(label => {
+                label.textContent = 'Selecione';
+                label.classList.add('text-slate-400');
+                label.classList.remove('text-slate-800', 'font-bold');
+            });
+
+            tbody.appendChild(novaLinha);
+        }
+
+        function finalizarAtos() {
+            const atosRegistrados = Array.from(document.querySelectorAll('#tabela_atos_body tr select'))
+                .some(select => select.value.trim() !== '');
+            const titulo = document.getElementById('tituloModalAtos');
+            const mensagem = document.getElementById('mensagemModalAtos');
+            const icone = document.querySelector('#modalAtosRegistrados > div > div');
+
+            if (!atosRegistrados) {
+                titulo.textContent = 'Nenhum ato registrado';
+                mensagem.textContent = 'Preencha pelo menos um campo Ato antes de finalizar.';
+                icone.className = 'mx-auto mb-3 w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center';
+            } else {
+                titulo.textContent = 'Atos registrados com sucesso!';
+                mensagem.textContent = 'Os atos foram registrados nesta etapa.';
+                icone.className = 'mx-auto mb-3 w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center';
+                atualizarStatusEtapa(1, 'concluido');
+            }
+
+            document.getElementById('modalAtosRegistrados').classList.remove('hidden');
+            document.getElementById('modalAtosRegistrados').classList.add('flex');
+        }
+
+        function fecharModalAtos() {
+            const modal = document.getElementById('modalAtosRegistrados');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        const statusEtapas = {
+            1: 'andamento',
+            2: 'pendente',
+            3: 'pendente',
+            4: 'pendente',
+            5: 'pendente',
+            6: 'pendente'
+        };
+
+        function atualizarStatusEtapa(etapa, status) {
+            if (etapa === 5) return;
+            statusEtapas[etapa] = status;
+            const elemento = document.getElementById(`circ_etapa_${etapa}`);
+            if (!elemento) return;
+
+            const configuracoes = {
+                pendente: ['fa-triangle-exclamation', 'text-amber-700 bg-amber-50'],
+                concluido: ['fa-circle-check', 'text-green-700 bg-green-50'],
+                analise: ['fa-circle-exclamation', 'text-red-700 bg-red-50'],
+                andamento: ['fa-spinner', 'text-slate-700 bg-slate-200']
+            };
+            const [icone, cor] = configuracoes[status];
+            elemento.className = `w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black ${cor}`;
+            elemento.innerHTML = `<i class="fa-solid ${icone}"></i>`;
+
+            const abaAtual = document.getElementById(`aba_etapa_${etapa}`);
+            const conteudo = document.getElementById(`conteudo_etapa_${etapa}`);
+            if (abaAtual && conteudo && !conteudo.classList.contains('hidden')) {
+                abaAtual.className = `p-1.5 rounded font-bold text-[11px] cursor-pointer ${classesCaixaStatus(status)}`;
+            }
+        }
+
+        function classesCaixaStatus(status) {
+            const classes = {
+                pendente: 'bg-amber-50 border border-amber-200 text-amber-700',
+                concluido: 'bg-green-50 border border-green-200 text-green-700',
+                analise: 'bg-red-50 border border-red-200 text-red-700',
+                andamento: 'bg-slate-200 border border-slate-300 text-slate-700'
+            };
+            return classes[status] || 'bg-slate-50 border border-slate-200 text-slate-600';
+        }
+
+        function atualizarAnaliseNecessaria(origem) {
+            return Boolean(origem);
+        }
+
+        function inserirMaisUmLocal(botao) {
+            const container = botao.parentElement;
+            const novoCampo = document.createElement('input');
+            novoCampo.type = 'text';
+            novoCampo.placeholder = 'Informe outro local';
+            novoCampo.className = 'flex-1 bg-white border border-slate-300 rounded px-2.5 py-1 text-[11px] text-slate-700 focus:outline-none focus:border-vinho-800';
+
+            container.parentElement.insertBefore(
+                Object.assign(document.createElement('div'), {
+                    className: 'flex items-center gap-1 mt-1'
+                }),
+                container.nextSibling
+            ).appendChild(novoCampo);
+        }
+
+        function toggleDropdown(event, id) {
+            event.stopPropagation();
+            document.querySelectorAll('[id^="drop_"]').forEach(el => {
+                if (el.id !== id) el.classList.add('hidden');
+            });
+            const drop = document.getElementById(id);
+            drop.classList.toggle('hidden');
+        }
+
+        function fecharTodosDropdowns(event) {
+            document.querySelectorAll('[id^="drop_"]').forEach(el => {
+                el.classList.add('hidden');
+            });
+        }
+
+        function atualizarResumoEquipes() {
+            const container = document.getElementById('drop_equipe_responsavel');
+            const selecionado = container.querySelector('input[type="radio"]:checked');
+            const label = document.getElementById('label_equipe_responsavel');
+            
+            if (!selecionado) {
+                label.textContent = "Selecione as equipes";
+                label.classList.add("text-slate-400");
+                label.classList.remove("text-slate-800", "font-bold");
+            } else {
+                label.textContent = selecionado.value;
+                label.classList.remove("text-slate-400");
+                label.classList.add("text-slate-800", "font-bold");
+            }
+        }
+
+        function validarFinalizacaoEvento() {
+            const tipoEvento = document.querySelector('input[name="tipo_evento"]:checked');
+            const equipeResponsavel = document.querySelector('input[name="equipe_responsavel"]:checked');
+
+            if (!tipoEvento || !equipeResponsavel) {
+                alert('Selecione o tipo de evento e a equipe responsável antes de finalizar.');
+                if (!tipoEvento) {
+                    document.querySelector('input[name="tipo_evento"]')?.focus();
+                } else {
+                    document.querySelector('input[name="equipe_responsavel"]')?.focus();
+                }
+                return false;
+            }
+
+            alert('Evento pronto para ser finalizado.');
+            return true;
+        }
+
+        function atualizarResumoSecretarias() {
+            const container = document.getElementById('lista_checkbox_secretarias');
+            const checkboxes = container.querySelectorAll('input[type="checkbox"]:checked');
+            const label = document.getElementById('label_secretarias_envolvidas');
+            
+            if (checkboxes.length === 0) {
+                label.textContent = "Selecione as secretarias";
+                label.classList.add("text-slate-400");
+                label.classList.remove("text-slate-800", "font-bold");
+            } else {
+                const selecionados = Array.from(checkboxes).map(cb => cb.value);
+                label.textContent = selecionados.join(', ');
+                label.classList.remove("text-slate-400");
+                label.classList.add("text-slate-800", "font-bold");
+            }
+        }
+
+        function atualizarResumoSec(i) {
+            const container = document.getElementById(`drop_${i}`);
+            const checkboxes = container.querySelectorAll('input[type="checkbox"]:checked');
+            const label = document.getElementById(`label_drop_${i}`);
+            
+            if (checkboxes.length === 0) {
+                label.textContent = "Selecione";
+                label.classList.add("text-slate-400");
+                label.classList.remove("text-slate-800", "font-bold");
+            } else {
+                const selecionados = Array.from(checkboxes).map(cb => cb.value);
+                label.textContent = selecionados.join(', ');
+                label.classList.remove("text-slate-400");
+                label.classList.add("text-slate-800", "font-bold");
+            }
+        }
+
+        function tratarValidação(id, escolha) {
+            const thFoto = document.getElementById(`th_foto_1`);
+            const thJust = document.getElementById(`th_just_1`);
+            const tdFoto = document.getElementById(`td_foto_${id}`);
+            const tdJust = document.getElementById(`td_just_${id}`);
+            const inputJust = document.getElementById(`just_${id}`);
+
+            if (escolha === 'sim') {
+                thFoto.classList.remove('hidden');
+                tdFoto.classList.remove('hidden');
+                thJust.classList.add('hidden');
+                tdJust.classList.add('hidden');
+                inputJust.value = '';
+            } else if (escolha === 'nao') {
+                thJust.classList.remove('hidden');
+                tdJust.classList.remove('hidden');
+                thFoto.classList.add('hidden');
+                tdFoto.classList.add('hidden');
+                inputJust.focus();
+            }
+        }
+
+        function handleFileSelect(id) {
+            const fileInput = document.getElementById(`file_upload_${id}`);
+            const label = document.getElementById(`file_label_${id}`);
+            if (fileInput.files && fileInput.files.length > 0) {
+                label.textContent = "Enviado";
+            } else {
+                label.textContent = "Upload";
+            }
+        }
+
+        function toggleMotivoPendencia(mostrar) {
+            const div = document.getElementById('divMotivoPendencia');
+            const alerta = document.getElementById('alertaAnaliseNecessaria');
+            const status = document.getElementById('statusValidacaoSerin');
+            if (mostrar) {
+                div.classList.remove('hidden');
+            } else {
+                div.classList.add('hidden');
+                if (alerta) alerta.classList.add('hidden');
+                if (status) {
+                    status.textContent = 'Pendente';
+                    status.className = 'bg-amber-100 text-amber-800 text-[9px] font-extrabold px-2 py-0.5 rounded uppercase';
+                }
+            }
+        }
+
+        function abrirCadastroAnalise() {
+            const radioAnalise = document.querySelector('input[name="val_serin"][value="analise_necessaria"]');
+            if (radioAnalise) radioAnalise.checked = true;
+            document.getElementById('divMotivoPendencia').classList.remove('hidden');
+            document.getElementById('motivoAnaliseNecessaria').focus();
+        }
+
+        function cadastrarAnaliseNecessaria() {
+            const origem = document.getElementById('origemAnaliseNecessaria');
+            const motivo = document.getElementById('motivoAnaliseNecessaria');
+
+            if (!motivo.value.trim() || !origem.value) {
+                alert('Informe o motivo e a origem da análise necessária antes de cadastrar.');
+                if (!motivo.value.trim()) motivo.focus();
+                else origem.focus();
+                return;
+            }
+
+            atualizarStatusEtapa(Number(origem.value), 'analise');
+            atualizarAlertaAnalise();
+            mudarEtapa(1);
+        }
+
+        function atualizarAlertaAnalise() {
+            const origem = document.getElementById('origemAnaliseNecessaria');
+            const motivo = document.getElementById('motivoAnaliseNecessaria');
+            const alerta = document.getElementById('alertaAnaliseNecessaria');
+            const texto = document.getElementById('textoAlertaAnalise');
+            const status = document.getElementById('statusValidacaoSerin');
+
+            if (!origem || !origem.value) return;
+
+            const nomeOrigem = origem.options[origem.selectedIndex].textContent;
+            texto.textContent = `Origem: ${nomeOrigem}${motivo.value.trim() ? ` | Motivo: ${motivo.value.trim()}` : ''}`;
+            alerta.classList.remove('hidden');
+            status.textContent = 'Análise necessária';
+            status.className = 'bg-red-100 text-red-800 text-[9px] font-extrabold px-2 py-0.5 rounded uppercase';
+        }
+
+        function atualizarNomeArquivo(input) {
+            const span = document.getElementById('nomeArquivoSelecionado');
+            if (input.files && input.files[0]) {
+                span.textContent = input.files[0].name;
+                span.classList.remove('text-slate-400');
+                span.classList.add('text-slate-700', 'font-bold');
+            } else {
+                span.textContent = 'Nenhum';
+                span.classList.add('text-slate-400');
+                span.classList.remove('text-slate-700', 'font-bold');
+            }
+        }
+
+        function atualizarNomeArquivoGenerico(input, targetId) {
+            const span = document.getElementById(targetId);
+            if (input.files && input.files[0]) {
+                span.textContent = input.files[0].name;
+                span.classList.remove('text-slate-400');
+                span.classList.add('text-slate-700', 'font-bold');
+            } else {
+                span.textContent = 'Nenhum arquivo selecionado';
+                span.classList.add('text-slate-400');
+                span.classList.remove('text-slate-700', 'font-bold');
+            }
+        }
+
+        function mudarSubAbaEtapa5(subaba) {
+            const subabas = ['participacao', 'credenciamento', 'controle_areas', 'documentacao', 'auditoria'];
+            subabas.forEach(s => {
+                const painel = document.getElementById(`painel_sub_${s}`);
+                const btn = document.getElementById(`btn_sub_${s}`);
+                if (painel) painel.classList.add('hidden');
+                if (btn) {
+                    btn.className = "w-full text-left px-3 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium text-[11px] flex items-center justify-between transition-all";
+                    const icone = btn.querySelector('i');
+                    if (icone) icone.className = icone.className.replace('text-white', 'text-slate-400');
+                }
+            });
+
+            const painelAtivo = document.getElementById(`painel_sub_${subaba}`);
+            const btnAtivo = document.getElementById(`btn_sub_${subaba}`);
+            if (painelAtivo) painelAtivo.classList.remove('hidden');
+            if (btnAtivo) {
+                btnAtivo.className = "w-full text-left px-3 py-2 rounded-lg bg-vinho-800 text-white font-bold text-[11px] flex items-center justify-between shadow-sm transition-all";
+                const iconeAtivo = btnAtivo.querySelector('i');
+                if (iconeAtivo) iconeAtivo.className = iconeAtivo.className.replace('text-slate-400', 'text-white');
+            }
+        }
+
+        function mudarSubTelaEtapa6(tipo) {
+            const btnSim = document.getElementById('btn_sim_etapa6');
+            const btnNao = document.getElementById('btn_nao_etapa6');
+            const blocoAcao = document.getElementById('bloco_acao_inferior');
+            const blocoAusencia = document.getElementById('bloco_ausencia_inferior');
+            
+            const telaWhatsapp = document.getElementById('tela_whatsapp');
+            const telaRepresentante = document.getElementById('tela_representante');
+            const telaJustificativa = document.getElementById('tela_justificativa');
+
+            const btnRep = document.getElementById('btn_rep_etapa6');
+            const btnJus = document.getElementById('btn_jus_etapa6');
+
+            if (tipo === 'sim') {
+                btnSim.className = "px-3 py-2 rounded-lg bg-vinho-800 text-white font-bold text-[11px] shadow-sm transition-all text-center";
+                btnNao.className = "px-3 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-[11px] transition-all text-center";
+                blocoAcao.classList.remove('hidden');
+                blocoAusencia.classList.add('hidden');
+
+                telaWhatsapp.classList.remove('hidden');
+                telaRepresentante.classList.add('hidden');
+                telaJustificativa.classList.add('hidden');
+            } else if (tipo === 'nao') {
+                btnNao.className = "px-3 py-2 rounded-lg bg-vinho-800 text-white font-bold text-[11px] shadow-sm transition-all text-center";
+                btnSim.className = "px-3 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-[11px] transition-all text-center";
+                blocoAcao.classList.add('hidden');
+                blocoAusencia.classList.remove('hidden');
+
+                mudarSubTelaEtapa6('representante');
+            } else if (tipo === 'representante') {
+                btnRep.className = "px-2 py-1.5 rounded-lg bg-vinho-800 text-white font-bold text-[10px] shadow-sm transition-all text-center";
+                btnJus.className = "px-2 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[10px] transition-all text-center";
+
+                telaWhatsapp.classList.add('hidden');
+                telaRepresentante.classList.remove('hidden');
+                telaJustificativa.classList.add('hidden');
+            } else if (tipo === 'justificar') {
+                btnJus.className = "px-2 py-1.5 rounded-lg bg-vinho-800 text-white font-bold text-[10px] shadow-sm transition-all text-center";
+                btnRep.className = "px-2 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[10px] transition-all text-center";
+
+                telaWhatsapp.classList.add('hidden');
+                telaRepresentante.classList.add('hidden');
+                telaJustificativa.classList.remove('hidden');
+            }
+        }
+
+        function mudarEtapa(etapaAlvo) {
+            for (let i = 1; i <= 6; i++) {
+                const conteudo = document.getElementById(`conteudo_etapa_${i}`);
+                const aba = document.getElementById(`aba_etapa_${i}`);
+                if (conteudo) conteudo.classList.add('hidden');
+                if (aba) {
+                    aba.className = `p-1.5 rounded hover:bg-slate-50 text-slate-600 font-bold text-[11px] cursor-pointer transition-colors ${i === 5 ? 'mt-3 pt-2 border-t border-slate-200' : ''}`;
+                }
+            }
+
+            const conteudoAtivo = document.getElementById(`conteudo_etapa_${etapaAlvo}`);
+            const abaAtiva = document.getElementById(`aba_etapa_${etapaAlvo}`);
+            if (conteudoAtivo) conteudoAtivo.classList.remove('hidden');
+            if (abaAtiva) {
+                abaAtiva.className = `p-1.5 rounded font-bold text-[11px] cursor-pointer ${etapaAlvo === 5 ? 'mt-3 pt-2 border-t border-slate-200' : ''} ${classesCaixaStatus(statusEtapas[etapaAlvo])}`;
+            }
+
+            const subtituloTopo = document.getElementById('subtituloTopo');
+            const tituloTopo = document.getElementById('tituloTopo');
+            const subTopoLabel = document.getElementById('subTopoLabel');
+            
+            if (etapaAlvo === 1) {
+                subTopoLabel.textContent = "Audiência e Eventos";
+                subtituloTopo.textContent = "Novo Registro";
+            } else if (etapaAlvo === 2) {
+                subTopoLabel.textContent = "Audiência e Eventos";
+                subtituloTopo.textContent = "Coordenação";
+                tituloTopo.textContent = "Gerenciamento e Registro da Coordenação";
+            } else if (etapaAlvo === 3) {
+                subTopoLabel.textContent = "Audiência e Eventos";
+                subtituloTopo.textContent = "Relatório Cerimonial";
+                tituloTopo.textContent = "Gerenciamento do Relatório Cerimonial";
+            } else if (etapaAlvo === 4) {
+                subTopoLabel.textContent = "Audiência e Eventos";
+                subtituloTopo.textContent = "Validação Serin";
+                tituloTopo.textContent = "Análise e Validação Serin";
+            } else if (etapaAlvo === 5) {
+                subTopoLabel.textContent = "Audiência e Eventos";
+                subtituloTopo.textContent = "Relatórios Gerenciais";
+            } else if (etapaAlvo === 6) {
+                subTopoLabel.textContent = "Motor de Decisões";
+                subtituloTopo.textContent = "Convocação & Convidados";
+                tituloTopo.textContent = "Convocação, Gestão de Convidados e Dados de Participação";
+            }
+        }
+
+        function resetarTelaInicial() {
+            if (confirm('Deseja descartar as alterações e voltar à tela inicial?')) {
+                window.location.reload();
+            }
+        }
+
+        function downloadSelf() {
+            const htmlContent = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'pleitos_novo_registro_compacto.html';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        function resizeContainer() {
+            const targetWidth = 1366;
+            const targetHeight = 768;
+            const scaleX = window.innerWidth / targetWidth;
+            const scaleY = window.innerHeight / targetHeight;
+            const finalScale = Math.min(scaleX, scaleY) * 0.98;
+            document.getElementById('appContainer').style.transform = `scale(${finalScale})`;
+        }
+        window.addEventListener('resize', resizeContainer);
+    </script>
+</body>
+</html>

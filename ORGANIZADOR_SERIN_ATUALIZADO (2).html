@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Demandas SERIN</title>
+<style>
+:root{--nav:#071d36;--bg:#e6f0f8;--line:#c9dbea;--ink:#10243a;--blue:#1687e5;--green:#18bd8b;--red:#ef4560;--yellow:#f5a623}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:13px Arial,sans-serif}.app{display:grid;grid-template-columns:176px minmax(0,1fr);min-height:100vh}.sidebar{background:linear-gradient(180deg,#071d36,#092a4d);color:#dbeafa;padding:18px 10px;display:flex;flex-direction:column}.brand{display:flex;align-items:center;gap:9px;padding:0 10px 24px}.brand-mark{width:39px;height:39px;border:2px solid #49c8f2;border-radius:10px;display:grid;place-items:center;color:#55d5f5;font-size:21px}.brand strong{display:block;color:#fff;font-size:16px}.brand b{color:#1ab8eb}.brand small{font-size:9px;color:#a9c0d6}.nav{display:grid;gap:4px}.nav button{border:0;background:transparent;color:#d4e3f0;text-align:left;border-radius:8px;padding:11px 12px;cursor:pointer}.nav button:hover,.nav button.active{background:#164b78;color:#fff;border-left:3px solid #21bfe8}.content{min-width:0;overflow:hidden}.header{height:76px;background:#0b2a4c;color:#fff;display:flex;align-items:center;gap:18px;padding:0 22px}.header h1{font-size:18px;margin:0;white-space:nowrap}.header h1 span{color:#20b6eb}.header small{display:block;color:#9bb4ca;font-size:10px;margin-top:4px}.search{margin-left:auto;width:min(370px,42%);background:#173e67;border:1px solid #28577f;border-radius:24px;padding:11px 17px;color:#fff;outline:0}.search::placeholder{color:#adc2d6}.user-name{color:#dbeafa;font-size:12px;white-space:nowrap}.workspace{display:block;padding:22px;max-width:1700px;margin:auto}.primary-area{min-width:0}.top-actions{display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px}.btn{border:0;border-radius:7px;padding:11px 16px;font-weight:bold;cursor:pointer}.btn.main{background:linear-gradient(100deg,#1779ee,#11b5e9);color:white}.btn.light{background:#fff;border:1px solid var(--line);color:#23628e}.summary{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-bottom:22px}.summary-card{min-height:98px;border-radius:11px;padding:14px;color:#fff;position:relative;box-shadow:0 4px 12px #143b5d18}.summary-card b{display:block;font-size:21px;margin:10px 0 3px}.summary-card small{opacity:.86}.summary-card .icon{position:absolute;right:13px;top:13px;font-size:19px}.s-red{background:linear-gradient(135deg,#7b2945,#3a2749);border:1px solid #ee4561}.s-yellow{background:linear-gradient(135deg,#805d1e,#343044);border:1px solid #f5ac20}.s-blue{background:linear-gradient(135deg,#173b79,#182f63);border:1px solid #3d6ce7}.s-green{background:linear-gradient(135deg,#08745f,#144c5a);border:1px solid #13c494}.s-purple{background:linear-gradient(135deg,#7c3aed,#4c1d95);border:1px solid #a78bfa}.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px}.column{min-width:0;min-height:390px;background:#d4e4ef;border:1px solid #b8d0e1;border-radius:10px;padding:9px}.column.drag-over{background:#c0def1;outline:2px dashed #1687e5;outline-offset:-2px}.column-head{display:flex;align-items:center;gap:8px;margin:2px 3px 9px;font-weight:bold;border-radius:8px;padding:9px;color:#fff}.column-head .count{margin-left:auto;border-radius:10px;padding:3px 7px;background:#ffffff38;color:#fff;font-size:11px}.column-head .del-col{background:transparent;border:0;color:#ffeded;cursor:pointer;font-size:13px;padding:0 3px;opacity:.8}.column-head .del-col:hover{opacity:1;color:#fff}.column.red .column-head{background:#8c2445}.column.yellow .column-head{background:#9a721e}.column.blue .column-head{background:#194382}.column.green .column-head{background:#078568}.column.purple .column-head{background:#6d28d9}.task{background:#0f3154;color:#edf7ff;border-radius:8px;margin:8px 0;padding:11px;cursor:grab;border-left:4px solid var(--blue);box-shadow:0 3px 8px #07223c22}.task:hover{background:#174569}.task.dragging{opacity:.42}.task h3{font-size:11px;margin:0 0 9px}.task .chips{display:flex;gap:5px;flex-wrap:wrap}.chip{background:#235c8d;border-radius:10px;padding:3px 7px;font-size:10px;color:#eaf6ff}.chip.high{background:#ad344a}.chip.mid{background:#826b2a}.chip.low{background:#087965}.task-foot{display:flex;justify-content:space-between;color:#a6c0d5;font-size:10px;margin-top:10px}.empty{color:#607d94;text-align:center;padding:36px 4px}.side-panel{display:none}.panel{background:#f4f9fc;border:1px solid #bdd3e2;border-radius:9px;padding:13px}.panel h3{font-size:12px;margin:0 0 12px;color:#1b3853}.panel h3 span{float:right;color:#1589dc;font-weight:normal;cursor:pointer}.filter-row{margin:10px 0;font-size:10px;color:#698096}.filter-row select,.filter-row input{width:100%;margin-top:5px;background:#e3eff7;border:0;border-radius:6px;padding:8px;color:#294763}.date-row{display:flex;gap:4px}.agenda{display:grid;gap:9px}.agenda div{font-size:10px;color:#557088}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:var(--yellow)}.dot.red{background:var(--red)}.define{border:1px dashed #7593ac;min-height:105px;display:grid;place-items:center;text-align:center;color:#294763;font-size:10px;border-radius:8px;cursor:pointer;background:#e7f2f8}.define strong{display:block;color:#123e62;font-size:12px;margin-top:8px}.filter-drawer{position:fixed;inset:0;background:#071d3680;display:none;justify-content:flex-start;z-index:5}.filter-drawer.show{display:flex}.filter-drawer .panel{width:min(320px,90vw);height:100%;border-radius:0;overflow:auto;padding:22px;box-shadow:8px 0 24px #071d3650}.modal{position:fixed;inset:0;background:#071d3680;display:none;place-items:center;padding:15px}.modal.show{display:grid}.box{background:#f8fbfd;width:min(1200px,96vw);max-height:94vh;overflow:auto;border-radius:12px;padding:26px 30px;box-shadow:0 15px 50px #071d3660}.box{position:relative}.box h2{margin:0 0 16px;padding-right:42px}.modal-close{position:absolute;top:14px;right:16px;width:34px;height:34px;border:0;border-radius:7px;background:transparent;color:#4d6478;font-size:28px;line-height:30px;cursor:pointer;display:grid;place-items:center}.modal-close:hover{background:#e5edf3;color:#0b2f4d}.field{margin:11px 0}.field label{display:block;font-weight:bold;font-size:12px;margin-bottom:5px}.field input,.field select,.field textarea{width:100%;border:1px solid #bfd3e1;border-radius:6px;padding:10px;font:inherit;background:#fff}.field textarea{min-height:300px}.actions{display:flex;justify-content:space-between;margin-top:17px}.danger{background:#fee2e2;color:#b4233d}.hidden{display:none}@media(max-width:1100px){.summary{grid-template-columns:repeat(3,1fr)}}@media(max-width:760px){.app{display:block}.sidebar{display:none}.header{padding:0 14px}.header h1{font-size:15px}.search{width:35vw}.workspace{padding:14px}.board{grid-template-columns:repeat(2,minmax(160px,1fr))}.summary{grid-template-columns:repeat(2,1fr)}}@media(max-width:480px){.header{gap:8px}.header small,.user-name{display:none}.search{width:45vw}.board{grid-template-columns:1fr}.top-actions{justify-content:stretch}.top-actions .btn{flex:1;padding:10px 6px;font-size:11px}}
+.report-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.report-card{background:#eaf3f9;border:1px solid #c4d8e6;border-radius:9px;padding:13px}.report-card small{display:block;color:#678096}.report-card b{display:block;font-size:22px;color:#123e62;margin-top:5px}.report-table{width:100%;border-collapse:collapse;margin-top:14px;font-size:11px}.report-table th,.report-table td{padding:9px;border-bottom:1px solid #d7e4ed;text-align:left;vertical-align:top}.report-table th{background:#0b2a4c;color:#fff;position:sticky;top:0}.report-scroll{max-height:45vh;overflow:auto;border:1px solid #d7e4ed;border-radius:8px}.report-status{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0 15px}.report-pill{background:#dbeaf4;border-radius:15px;padding:6px 10px;font-size:10px;color:#234966}@media(max-width:700px){.report-grid{grid-template-columns:repeat(2,1fr)}}@media print{body *{visibility:hidden}#reportModal,#reportModal *{visibility:visible}#reportModal{position:absolute;inset:0;background:#fff;display:block;padding:0}.report-box{width:100%!important;max-height:none!important;box-shadow:none!important}.report-actions{display:none!important}.report-scroll{max-height:none;overflow:visible;border:0}.report-table th{position:static}}
+</style>
+<style>.status-manager{border-top:1px solid #c9dbea;margin-top:18px;padding-top:15px}.status-manager h4{margin:0 0 9px;color:#1b3853;font-size:12px}.status-item{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:7px 0;color:#294763;font-size:11px}.remove-status{border:0;border-radius:5px;padding:5px 7px;background:#fee2e2;color:#b4233d;font-size:10px;cursor:pointer}.remove-status:hover{background:#fecaca}</style>
+</head>
+<body>
+<div class="app"><aside class="sidebar"><div class="brand"><div class="brand-mark">☷</div><div><strong>Demandas <b>SERIN</b></strong><small>Organização • Planejamento</small></div></div><nav class="nav"><button class="active" onclick="setFilter('todos',this)">⌂ &nbsp; Início</button><button onclick="setFilter('todos',this)">▣ &nbsp; Demandas</button><button onclick="setFilter('prioridade',this)">⚠ &nbsp; Prioridades</button><button onclick="setFilter('aguardando',this)">◷ &nbsp; Aguardando</button><button onclick="setFilter('andamento',this)">◷ &nbsp; Em andamento</button><button onclick="setFilter('concluido',this)">✓ &nbsp; Concluídas</button><div id="customNav"></div><button onclick="openFilters()">⚱ &nbsp; Filtros</button><button onclick="openReport(this)">▥ &nbsp; Relatórios</button></nav></aside>
+<main class="content"><header class="header"><div><h1>Demandas <span>SERIN</span></h1><small>Organização &nbsp;•&nbsp; Planejamento &nbsp;•&nbsp; Resultados</small></div><input id="search" class="search" placeholder="⌕  Pesquisar demandas, projetos, notas..." oninput="render()"><span class="user-name">Vinicius⌄</span></header>
+<div class="workspace"><section class="primary-area"><div class="top-actions"><button class="btn light" onclick="exportComplete()">⇩ &nbsp;Exportar sistema completo</button><button class="btn main" onclick="novo()">＋ &nbsp;Nova demanda</button><button class="btn light" onclick="novoStatus()">＋ &nbsp;Novo status</button></div><div id="summary" class="summary"></div><div id="board" class="board"></div></section>
+<div id="filterDrawer" class="filter-drawer" onclick="closeFilters(event)"><div class="panel" onclick="event.stopPropagation()"><h3>⚱ &nbsp;Filtros <span onclick="clearFilters()">Limpar</span></h3><div class="filter-row">Projeto<select id="filterProject" onchange="applyFilters()"><option value="todos">Todos</option></select></div><div class="filter-row">Status<select id="filterStatus" onchange="applyFilters()"><option value="todos">Todos</option></select></div><div class="filter-row">Prioridade<select id="filterPriority" onchange="applyFilters()"><option value="todas">Todas</option><option>Alta</option><option>Média</option><option>Baixa</option></select></div><div class="filter-row">Prazo<div class="date-row"><input id="filterFrom" type="date" onchange="applyFilters()"><input id="filterTo" type="date" onchange="applyFilters()"></div></div><div class="status-manager"><h4>Gerenciar status</h4><div id="statusManager"></div></div><button class="btn main" onclick="closeFilters()">Aplicar filtros</button></div></div></main></div>
+
+<div id="modal" class="modal">
+  <div class="box">
+    <button class="modal-close" type="button" onclick="closeM()" title="Fechar" aria-label="Fechar">×</button>
+    <h2 id="mt">Nova demanda</h2>
+    <input id="id" type="hidden">
+    
+    <div class="field">
+      <label>Título</label>
+      <input id="title" placeholder="Ex.: Finalizar apresentação">
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div class="field" style="margin-top:0;">
+        <label>Status</label>
+        <select id="status"></select>
+      </div>
+      <div class="field" style="margin-top:0;">
+        <label>Prioridade</label>
+        <select id="priority">
+          <option>Alta</option>
+          <option selected>Média</option>
+          <option>Baixa</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 11px;">
+      <div class="field" style="margin-top:0;">
+        <label>Prazo</label>
+        <input id="date" type="date">
+      </div>
+      <div class="field" style="margin-top:0;">
+        <label>Projeto / categoria</label>
+        <input id="project" placeholder="Ex.: Mapa eleitoral">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Observações</label>
+      <textarea id="notes" placeholder="Detalhes, lembretes..."></textarea>
+    </div>
+
+    <div class="actions">
+      <button id="del" class="btn danger hidden" onclick="removeItem()">Excluir</button>
+      <div>
+        <button class="btn light" onclick="closeM()">Cancelar</button> 
+        <button class="btn main" onclick="saveItem()">Salvar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="statusModal" class="modal">
+  <div class="box">
+    <button class="modal-close" type="button" onclick="closeStatusModal()" title="Fechar" aria-label="Fechar">×</button>
+    <h2>Novo status</h2>
+    <div class="field">
+      <label>Nome do status</label>
+      <input id="statusName" placeholder="Ex.: Em revisão">
+    </div>
+    <div class="actions">
+      <span></span>
+      <div>
+        <button class="btn light" onclick="closeStatusModal()">Cancelar</button> 
+        <button class="btn main" onclick="saveStatus()">Criar status</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="reportModal" class="modal">
+  <div class="box report-box">
+    <button class="modal-close" type="button" onclick="closeReport()" title="Fechar" aria-label="Fechar">×</button>
+    <h2>Relatório de Demandas SERIN</h2>
+    <div id="reportContent"></div>
+    <div class="actions report-actions">
+      <span></span>
+      <div>
+        <button class="btn light" onclick="closeReport()">Fechar</button>
+        <button class="btn main" onclick="window.print()">Imprimir / Salvar em PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const K='organizador_v1',SK='organizador_statuses';
+const defaultStatusIds=['prioridade','andamento','aguardando','concluido'];
+let items=JSON.parse(localStorage.getItem(K)||'[]');
+let statuses=(JSON.parse(localStorage.getItem(SK)||'null')||[{id:'prioridade',label:'Prioridades',icon:'⚠',tone:'red'},{id:'aguardando',label:'Aguardando',icon:'◷',tone:'blue'},{id:'andamento',label:'Em andamento',icon:'◷',tone:'yellow'},{id:'concluido',label:'Concluídas',icon:'✓',tone:'green'}]).filter(x=>x.id!=='ideia');
+statuses.find(x=>x.id==='prioridade').icon='⚠';
+if(statuses.find(x=>x.id==='aguardando'))statuses.find(x=>x.id==='aguardando').icon='◷';
+let filter='todos';
+let L=Object.fromEntries(statuses.map(x=>[x.id,x.label]));
+let filterOptions={project:'todos',priority:'todas',from:'',to:''};
+
+function save(){localStorage.setItem(K,JSON.stringify(items))}
+function saveStatuses(){localStorage.setItem(SK,JSON.stringify(statuses))}
+function esc(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function tone(st){return statuses.find(x=>x.id===st)?.tone||'blue'}
+function icon(st){return statuses.find(x=>x.id===st)?.icon||'•'}
+
+function openFilters(){document.getElementById('filterDrawer').classList.add('show')}
+function closeFilters(event){if(!event||event.target===document.getElementById('filterDrawer'))document.getElementById('filterDrawer').classList.remove('show')}
+function applyFilters(){filter=document.getElementById('filterStatus').value;filterOptions={project:document.getElementById('filterProject').value,priority:document.getElementById('filterPriority').value,from:document.getElementById('filterFrom').value,to:document.getElementById('filterTo').value};render()}
+function setFilter(value,button){filter=value;if(button){document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));button.classList.add('active')}render()}
+function clearFilters(){filter='todos';filterOptions={project:'todos',priority:'todas',from:'',to:''};document.getElementById('search').value='';document.getElementById('filterProject').value='todos';document.getElementById('filterStatus').value='todos';document.getElementById('filterPriority').value='todas';document.getElementById('filterFrom').value='';document.getElementById('filterTo').value='';render()}
+
+function renderStatusManager(){
+  let target=document.getElementById('statusManager');
+  if(!target)return;
+  let custom=statuses.filter(x=>!defaultStatusIds.includes(x.id));
+  target.innerHTML=custom.length?custom.map(x=>'<div class="status-item"><span>'+icon(x.id)+' '+esc(x.label)+'</span><button class="remove-status" onclick="deleteStatus(\''+x.id+'\')">Excluir</button></div>').join(''):'<div class="status-item">Nenhum status personalizado.</div>';
+}
+
+function deleteStatus(id){
+  let status=statuses.find(x=>x.id===id);
+  if(!status||defaultStatusIds.includes(id))return;
+  if(!confirm('Remover o status '+status.label+'?'))return;
+  let replacement=statuses.find(x=>x.id==='andamento');
+  items=items.map(x=>x.status===id?{...x,status:replacement.id}:x);
+  statuses=statuses.filter(x=>x.id!==id);
+  delete L[id];
+  save();
+  saveStatuses();
+  if(filter===id)filter='todos';
+  render();
+}
+
+function render(){
+  let q=document.getElementById('search').value.toLowerCase();
+  let visible=filter==='todos'?statuses:statuses.filter(x=>x.id===filter);
+  let counts=Object.fromEntries(statuses.map(x=>[x.id,items.filter(i=>i.status===x.id).length]));
+  
+  document.getElementById('summary').innerHTML=statuses.slice(0,4).map(x=>'<div class="summary-card s-'+x.tone+'"><span class="icon">'+x.icon+'</span>'+x.label+'<b>'+counts[x.id]+'</b><small>'+(['concluido'].includes(x.id)?'finalizadas':'pendentes')+'</small></div>').join('');
+  document.getElementById('filterStatus').innerHTML='<option value="todos">Todos</option>'+statuses.map(x=>'<option value="'+x.id+'">'+esc(x.label)+'</option>').join('');
+  
+  let projects=[...new Set(items.map(x=>x.project).filter(Boolean))];
+  document.getElementById('filterProject').innerHTML='<option value="todos">Todos</option>'+projects.map(x=>'<option>'+esc(x)+'</option>').join('');
+  
+  document.getElementById('filterStatus').value=filter;
+  document.getElementById('filterProject').value=filterOptions.project;
+  document.getElementById('filterPriority').value=filterOptions.priority;
+  document.getElementById('filterFrom').value=filterOptions.from;
+  document.getElementById('filterTo').value=filterOptions.to;
+  
+  renderStatusManager();
+  let customNav=document.getElementById('customNav');
+  if(customNav){
+    customNav.innerHTML=statuses.filter(x=>!defaultStatusIds.includes(x.id)).map(x=>'<button onclick="setFilter(\''+x.id+'\',this)">'+esc(x.icon||'•')+' &nbsp; '+esc(x.label)+'</button>').join('');
+  }
+
+  document.getElementById('board').innerHTML=visible.map(st=>{
+    let ar=items.filter(x=>{
+      let text=(x.title+' '+x.project+' '+x.notes).toLowerCase();
+      return x.status===st.id&&text.includes(q)&&
+      (filterOptions.project==='todos'||x.project===filterOptions.project)&&
+      (filterOptions.priority==='todas'||x.priority===filterOptions.priority)&&
+      (!filterOptions.from||x.date>=filterOptions.from)&&
+      (!filterOptions.to||x.date<=filterOptions.to);
+    });
+
+    let isCustom=!defaultStatusIds.includes(st.id);
+    let deleteBtnHtml=isCustom?'<button class="del-col" onclick="deleteStatus(\''+st.id+'\')" title="Excluir coluna">🗑</button>':'';
+
+    return '<section class="column '+st.tone+'" data-status="'+st.id+'" ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="drop(event)"><div class="column-head"><span>'+icon(st.id)+' &nbsp;'+esc(st.label)+'</span>'+deleteBtnHtml+'<span class="count">'+ar.length+'</span></div>'+
+    (ar.length?ar.map(x=>'<article class="task" data-id="'+x.id+'" draggable="true" ondragstart="startDrag(event,\''+x.id+'\')" ondragend="endDrag(event)" onclick="edit(\''+x.id+'\')"><h3>'+esc(x.title)+'</h3><div class="chips"><span class="chip">'+esc(x.project||'Geral')+'</span><span class="chip '+(x.priority==='Alta'?'high':x.priority==='Baixa'?'low':'mid')+'">'+esc(x.priority)+'</span></div><div class="task-foot"><span>▣ '+(x.date?new Date(x.date+'T00:00').toLocaleDateString('pt-BR'):'Sem prazo')+'</span><span>✎</span></div></article>').join(''):'<div class="empty">Nenhuma demanda aqui.</div>')+'</section>';
+  }).join('');
+}
+
+function updateOptions(){document.getElementById('status').innerHTML=statuses.map(x=>'<option value="'+x.id+'">'+esc(x.label)+'</option>').join('')}
+function novo(preferred){updateOptions();['id','title','date','project','notes'].forEach(x=>document.getElementById(x).value='');document.getElementById('status').value=preferred||(filter==='todos'?'andamento':filter);document.getElementById('priority').value='Média';document.getElementById('mt').textContent='Nova demanda';document.getElementById('del').classList.add('hidden');document.getElementById('modal').classList.add('show')}
+function edit(id){let x=items.find(a=>a.id===id);if(!x)return;updateOptions();document.getElementById('id').value=x.id;document.getElementById('title').value=x.title;document.getElementById('status').value=x.status;document.getElementById('priority').value=x.priority;document.getElementById('date').value=x.date||'';document.getElementById('project').value=x.project||'';document.getElementById('notes').value=x.notes||'';document.getElementById('del').classList.remove('hidden');document.getElementById('modal').classList.add('show')}
+function saveItem(){let title=document.getElementById('title').value.trim();if(!title)return alert('Digite um título.');let id=document.getElementById('id').value,obj={id:id||Date.now().toString(),title,status:document.getElementById('status').value,priority:document.getElementById('priority').value,date:document.getElementById('date').value,project:document.getElementById('project').value,notes:document.getElementById('notes').value};if(id)items=items.map(x=>x.id===id?obj:x);else items.push(obj);save();closeM();render()}
+function removeItem(){let id=document.getElementById('id').value;if(confirm('Excluir esta demanda?')){items=items.filter(x=>x.id!==id);save();closeM();render()}}
+function closeM(){document.getElementById('modal').classList.remove('show')}
+function novoStatus(){document.getElementById('statusName').value='';document.getElementById('statusModal').classList.add('show');setTimeout(()=>document.getElementById('statusName').focus(),0)}
+function closeStatusModal(){document.getElementById('statusModal').classList.remove('show')}
+function saveStatus(){let label=document.getElementById('statusName').value.trim();if(!label)return;let id=label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');if(!id||L[id]){alert('Esse status já existe ou não é válido.');return}let colors=['red','yellow','blue','green','purple'];statuses.push({id,label,icon:'•',tone:colors[statuses.length%colors.length]});L[id]=label;saveStatuses();closeStatusModal();render()}
+function startDrag(e,id){e.dataTransfer.setData('text/plain',id);e.dataTransfer.effectAllowed='move';e.currentTarget.classList.add('dragging')}
+function allowDrop(e){e.preventDefault();e.dataTransfer.dropEffect='move';e.currentTarget.classList.add('drag-over')}
+function leaveDrop(e){if(!e.currentTarget.contains(e.relatedTarget))e.currentTarget.classList.remove('drag-over')}
+function endDrag(e){e.currentTarget.classList.remove('dragging');document.querySelectorAll('.column').forEach(x=>x.classList.remove('drag-over'))}
+function drop(e){
+  e.preventDefault();
+  let id=e.dataTransfer.getData('text/plain');
+  let item=items.find(x=>x.id===id);
+  if(!item){endDrag(e);return}
+  let newStatus=e.currentTarget.dataset.status;
+  let targetEl=e.target.closest('.task');
+  let targetId=targetEl?.dataset.id;
+  let moving=items.find(x=>x.id===id);
+  items=items.filter(x=>x.id!==id);
+  moving.status=newStatus;
+  if(targetId && targetId!==id){
+    let targetIndex=items.findIndex(x=>x.id===targetId);
+    if(targetIndex>=0){
+      let rect=targetEl.getBoundingClientRect();
+      let after=e.clientY>rect.top+rect.height/2;
+      items.splice(targetIndex+(after?1:0),0,moving);
+    }else items.push(moving);
+  }else{
+    let sameStatusIndexes=items.map((x,i)=>x.status===newStatus?i:-1).filter(i=>i>=0);
+    if(sameStatusIndexes.length) items.splice(sameStatusIndexes[sameStatusIndexes.length-1]+1,0,moving);
+    else items.push(moving);
+  }
+  save();render();endDrag(e)
+}
+
+
+function openReport(button){
+  if(button){document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));button.classList.add('active')}
+  const today=new Date();today.setHours(0,0,0,0);
+  const concluded=items.filter(x=>x.status==='concluido').length;
+  const pending=items.length-concluded;
+  const overdue=items.filter(x=>x.status!=='concluido'&&x.date&&new Date(x.date+'T00:00')<today).length;
+  const high=items.filter(x=>x.priority==='Alta').length;
+  const statusHtml=statuses.map(st=>'<span class="report-pill">'+esc(st.label)+': <b>'+items.filter(x=>x.status===st.id).length+'</b></span>').join('');
+  const rows=items.length?items.map(x=>{
+    let st=statuses.find(s=>s.id===x.status)?.label||x.status;
+    let d=x.date?new Date(x.date+'T00:00').toLocaleDateString('pt-BR'):'Sem prazo';
+    return '<tr><td>'+esc(x.title)+'</td><td>'+esc(st)+'</td><td>'+esc(x.priority)+'</td><td>'+esc(x.project||'Geral')+'</td><td>'+d+'</td></tr>';
+  }).join(''):'<tr><td colspan="5">Nenhuma demanda cadastrada.</td></tr>';
+  document.getElementById('reportContent').innerHTML='<div style="color:#607d94;font-size:11px">Gerado em '+new Date().toLocaleString('pt-BR')+'</div><div class="report-grid"><div class="report-card"><small>Total de demandas</small><b>'+items.length+'</b></div><div class="report-card"><small>Pendentes</small><b>'+pending+'</b></div><div class="report-card"><small>Concluídas</small><b>'+concluded+'</b></div><div class="report-card"><small>Atrasadas</small><b>'+overdue+'</b></div></div><div class="report-status">'+statusHtml+'<span class="report-pill">Prioridade alta: <b>'+high+'</b></span></div><div class="report-scroll"><table class="report-table"><thead><tr><th>Demanda</th><th>Status</th><th>Prioridade</th><th>Projeto / categoria</th><th>Prazo</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  document.getElementById('reportModal').classList.add('show');
+}
+function closeReport(){document.getElementById('reportModal').classList.remove('show')}
+
+function exportComplete(){
+  save();saveStatuses();
+  const stamp=new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14);
+  const newK='organizador_export_'+stamp;
+  const newSK='organizador_statuses_export_'+stamp;
+  let html='<!doctype html>\n'+document.documentElement.outerHTML;
+  const safeItems=JSON.stringify(items).replace(/</g,'\\u003c');
+  const safeStatuses=JSON.stringify(statuses).replace(/</g,'\\u003c');
+  html=html.replace("const K='organizador_v1',SK='organizador_statuses';",`const K='${newK}',SK='${newSK}';`);
+  html=html.replace("let items=JSON.parse(localStorage.getItem(K)||'[]');",`let items=JSON.parse(localStorage.getItem(K)||${JSON.stringify(safeItems)});`);
+  html=html.replace("let statuses=(JSON.parse(localStorage.getItem(SK)||'null')||[{id:'prioridade',label:'Prioridades',icon:'⚠',tone:'red'},{id:'aguardando',label:'Aguardando',icon:'◷',tone:'blue'},{id:'andamento',label:'Em andamento',icon:'◷',tone:'yellow'},{id:'concluido',label:'Concluídas',icon:'✓',tone:'green'}]).filter(x=>x.id!=='ideia');",`let statuses=(JSON.parse(localStorage.getItem(SK)||${JSON.stringify(safeStatuses)})||[]).filter(x=>x.id!=='ideia');`);
+  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='Demandas_SERIN_'+new Date().toLocaleDateString('pt-BR').replaceAll('/','-')+'.html';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+}
+
+render();
+</script></body></html>

@@ -100,8 +100,143 @@
 
 <body class="bg-slate-900 text-slate-800 min-h-screen flex items-center justify-center p-2 overflow-x-hidden">
 
+    <div id="predictive-bg" style="position: fixed; inset: 0; z-index: 0; pointer-events: none; width: 100vw; height: 100vh; background: #030303;">
+        <canvas id="predictive-canvas" style="display: block; width: 100%; height: 100%;"></canvas>
+    </div>
+
+    <script>
+        (() => {
+            const canvas = document.getElementById('predictive-canvas');
+            if (!canvas) return;
+            const gl = canvas.getContext('webgl', { alpha: false, antialias: false, depth: false });
+            if (!gl) return;
+
+            const vertexSource = `attribute vec2 a_pos; void main(){ gl_Position = vec4(a_pos, 0.0, 1.0); }`;
+            const fragmentSource = `
+                precision mediump float;
+                uniform vec2 uRes;
+                uniform float uTime, uDpr, uCell, uDot;
+                uniform float uPeak, uHeight, uThick, uFall;
+                uniform vec3 uBg, uBase, uAccent, uHigh;
+                uniform vec2 uMouse;
+                uniform float uMouseRadius, uMouseStrength;
+
+                void main(){
+                    float cellSize = max(uCell, 2.0);
+                    vec2 cellIndex = floor(gl_FragCoord.xy / cellSize);
+                    vec2 cellCenter = (cellIndex + 0.5) * cellSize;
+                    float x = cellCenter.x / uDpr;
+                    float y = (uRes.y - cellCenter.y) / uDpr;
+                    float width = uRes.x / uDpr;
+                    float height = uRes.y / uDpr;
+                    float normalizedX = (x - width * 0.5) / (width * 0.75);
+                    float curveY = height * uPeak + normalizedX * normalizedX * (height * uHeight);
+                    float mouseDistance = x - uMouse.x;
+                    float influence = uMouseStrength * exp(-(mouseDistance * mouseDistance) / (2.0 * uMouseRadius * uMouseRadius + 1.0));
+                    curveY = mix(curveY, uMouse.y, influence);
+                    float distanceToCurve = abs(y - curveY);
+                    float thickness = (140.0 + (1.0 - abs(normalizedX)) * 80.0) * uThick;
+                    vec3 color = uBg;
+
+                    if (distanceToCurve < thickness) {
+                        float intensity = 1.0 - distanceToCurve / thickness;
+                        float waveX = sin(x * 0.015 + uTime);
+                        float waveY = cos(y * 0.02 + uTime);
+                        intensity = intensity * 0.7 + waveX * waveY * 0.3 * intensity;
+                        intensity *= max(0.0, 1.0 - pow(abs(normalizedX), uFall));
+
+                        if (intensity > 0.02) {
+                            float side = uDot * intensity * uDpr;
+                            vec2 distanceToCell = abs(gl_FragCoord.xy - cellCenter);
+                            float coverage = 1.0 - smoothstep(side * 0.5 - 1.0, side * 0.5 + 1.0, max(distanceToCell.x, distanceToCell.y));
+                            vec3 ink = mix(uBase, uAccent, clamp(pow(intensity, 1.1), 0.0, 1.0));
+                            ink = mix(ink, uHigh, smoothstep(0.72, 1.0, intensity));
+                            color = mix(uBg, ink, coverage * clamp(intensity * 1.6, 0.0, 1.0));
+                        }
+                    }
+
+                    gl_FragColor = vec4(color, 1.0);
+                }`;
+
+            function compileShader(type, source) {
+                const shader = gl.createShader(type);
+                gl.shaderSource(shader, source);
+                gl.compileShader(shader);
+                return shader;
+            }
+
+            const vertexShader = compileShader(gl.VERTEX_SHADER, vertexSource);
+            const fragmentShader = compileShader(gl.FRAGMENT_SHADER, fragmentSource);
+            const program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+            gl.useProgram(program);
+
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+            const position = gl.getAttribLocation(program, 'a_pos');
+            gl.enableVertexAttribArray(position);
+            gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+
+            const uniformLocations = {};
+            const uniform = name => uniformLocations[name] || (uniformLocations[name] = gl.getUniformLocation(program, name));
+            let mouseX = 0;
+            let mouseY = 0;
+            let mouseActive = 0;
+
+            window.addEventListener('pointermove', event => {
+                const rect = canvas.getBoundingClientRect();
+                mouseX = event.clientX - rect.left;
+                mouseY = rect.height - (event.clientY - rect.top);
+                mouseActive = 1;
+            });
+
+            let lastTime = performance.now();
+            let clock = 0;
+
+            function render(now) {
+                const delta = Math.min(0.05, (now - lastTime) / 1000);
+                lastTime = now;
+                clock += delta * 1.8;
+
+                const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                const bufferWidth = Math.max(1, Math.round(window.innerWidth * dpr));
+                const bufferHeight = Math.max(1, Math.round(window.innerHeight * dpr));
+                if (canvas.width !== bufferWidth || canvas.height !== bufferHeight) {
+                    canvas.width = bufferWidth;
+                    canvas.height = bufferHeight;
+                }
+                gl.viewport(0, 0, bufferWidth, bufferHeight);
+
+                const pitch = Math.min(bufferWidth, bufferHeight) / dpr / 78;
+                gl.uniform2f(uniform('uRes'), bufferWidth, bufferHeight);
+                gl.uniform1f(uniform('uTime'), clock);
+                gl.uniform1f(uniform('uDpr'), dpr);
+                gl.uniform1f(uniform('uCell'), Math.max(2, pitch * dpr));
+                gl.uniform1f(uniform('uDot'), pitch * 1.2 * 1.02);
+                gl.uniform1f(uniform('uPeak'), 1.0);
+                gl.uniform1f(uniform('uHeight'), 0.0);
+                gl.uniform1f(uniform('uThick'), 2.06);
+                gl.uniform1f(uniform('uFall'), 6.0);
+                gl.uniform2f(uniform('uMouse'), mouseX * dpr, mouseY * dpr);
+                gl.uniform1f(uniform('uMouseRadius'), 236);
+                gl.uniform1f(uniform('uMouseStrength'), 0.34 * mouseActive);
+                gl.uniform3f(uniform('uBg'), 0.012, 0.012, 0.012);
+                gl.uniform3f(uniform('uBase'), 0.271, 0.059, 0.059);
+                gl.uniform3f(uniform('uAccent'), 0.608, 0.004, 0.008);
+                gl.uniform3f(uniform('uHigh'), 0.85, 0.18, 0.18);
+                gl.drawArrays(gl.TRIANGLES, 0, 3);
+                requestAnimationFrame(render);
+            }
+
+            requestAnimationFrame(render);
+        })();
+    </script>
+
     <div id="appContainer"
-        class="w-full max-w-[1366px] h-[768px] bg-slate-100 flex flex-col rounded-xl shadow-2xl overflow-hidden transition-all duration-300 transform origin-center relative">
+        class="relative z-10 w-full max-w-[1366px] h-[768px] bg-slate-100 flex flex-col rounded-xl shadow-2xl overflow-hidden transition-all duration-300 transform origin-center">
 
         <!-- CABEÇALHO DO SISTEMA -->
         <header class="text-white h-14 px-4 flex items-center justify-between shadow-md shrink-0 select-none"
@@ -128,11 +263,6 @@
             </div>
 
             <div class="flex items-center gap-3">
-                <button onclick="downloadSelf()"
-                    class="bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded text-[10px] font-bold text-white transition-all flex items-center gap-1 border border-white/15">
-                    <i class="fa-solid fa-download"></i> Baixar HTML
-                </button>
-
                 <div class="bg-black/30 px-2.5 py-1 rounded-full flex items-center gap-2 border border-white/10">
                     <div
                         class="w-5 h-5 rounded-full bg-white text-vinho-800 font-extrabold text-[9px] flex items-center justify-center">
@@ -230,7 +360,7 @@
                                 </div>
                                 <div>
                                     <label class="block text-[10px] font-bold text-slate-600 mb-1">Território</label>
-                                    <select id="filtroTerritório"
+                                    <select id="filtroTerritorio"
                                         class="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-700">
                                         <option value="Todos Territórios">Todos Territórios</option>
                                         <option value="BACIA DO JACUÍPE">BACIA DO JACUÍPE</option>
@@ -436,20 +566,14 @@
                                     <div class="grid grid-cols-1 gap-2">
                                         <label
                                             class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                                            <input type="checkbox" data-col="analisedaSerin" checked
+                                            <input type="checkbox" data-col="analiseSerin" checked
                                                 class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Análise
                                             da SERIN
                                         </label>
                                         <label
                                             class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                                            <input type="checkbox" data-col="municipio" checked
+                                            <input type="checkbox" data-col="numPleito" checked
                                                 class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Nº do
-                                            Pleito
-                                        </label>
-                                        <label
-                                            class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                                            <input type="checkbox" data-col="municipio" checked
-                                                class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Ano do
                                             Pleito
                                         </label>
                                         <label
@@ -460,13 +584,19 @@
                                         </label>
                                         <label
                                             class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                                            <input type="checkbox" data-col="municipio" checked
+                                            <input type="checkbox" data-col="territorioIdentidade" checked
                                                 class="col-check rounded text-vinho-800 focus:ring-vinho-800">
                                             Território de Identidade
                                         </label>
                                         <label
+                                        class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+                                        <input type="checkbox" data-col="prefeito" checked
+                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Prefeito(a)
+                                        / Governador
+                                    </label>
+                                        <label
                                             class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                                            <input type="checkbox" data-col="municipio" checked
+                                            <input type="checkbox" data-col="secretaria" checked
                                                 class="col-check rounded text-vinho-800 focus:ring-vinho-800">
                                             Secretarias / Órgão
                                         </label>
@@ -481,26 +611,8 @@
                                         DADOS SECUNDÁRIOS</div>
                                     <label
                                         class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                                        <input type="checkbox" data-col="municipio" checked
-                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Município
-                                        / Estado
-                                    </label>
-                                    <label
-                                        class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                                        <input type="checkbox" data-col="municipio" checked
-                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Município
-                                        / Estado
-                                    </label>
-                                    <label
-                                        class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                                        <input type="checkbox" data-col="municipio" checked
-                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Município
-                                        / Estado
-                                    </label>
-                                    <label
-                                        class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
                                         <input type="checkbox" data-col="pleitosObjeto" checked
-                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Pleitos /
+                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Pleito /
                                         Objeto
                                     </label>
                                     <label
@@ -520,20 +632,9 @@
                                     </label>
                                     <label
                                         class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                                        <input type="checkbox" data-col="territorioIdentidade" checked
-                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800">
-                                        Território de Identidade
-                                    </label>
-                                    <label
-                                        class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
                                         <input type="checkbox" data-col="prioridade" checked
                                             class="col-check rounded text-vinho-800 focus:ring-vinho-800">
                                         Prioridade
-                                    </label>
-                                    <label
-                                        class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                                        <input type="checkbox" data-col="numPleito" checked
-                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Nº Pleito
                                     </label>
                                     <label
                                         class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
@@ -549,38 +650,18 @@
                                     <label
                                         class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
                                         <input type="checkbox" data-col="prefeito" checked
-                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Prefeito
-                                        / Governador
+                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Partido Político
                                     </label>
                                     <label
                                         class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
                                         <input type="checkbox" data-col="partido" checked
-                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Partido
-                                        Político
-                                    </label>
-                                    <label
-                                        class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                                        <input type="checkbox" data-col="secretaria" checked
-                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800">
-                                        Secretaria / Órgão
+                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Classificação
                                     </label>
                                     <label
                                         class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
                                         <input type="checkbox" data-col="tipoPleito" checked
                                             class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Tipo
-                                        Pleito / Classificação
-                                    </label>
-                                    <label
-                                        class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                                        <input type="checkbox" data-col="tetoOrcamentario" checked
-                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Teto
-                                        Orçamentário
-                                    </label>
-                                    <label
-                                        class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                                        <input type="checkbox" data-col="valor" checked
-                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Valor
-                                        (R$)
+                                        Pleito 
                                     </label>
                                     <label
                                         class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
@@ -616,9 +697,9 @@
                                     </label>
                                     <label
                                         class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                                        <input type="checkbox" data-col="validacaoAtos" checked
-                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Validação
-                                        dos Atos
+                                        <input type="checkbox" data-col="tetoOrcamentario" checked
+                                            class="col-check rounded text-vinho-800 focus:ring-vinho-800"> Teto
+                                        Orçamentário
                                     </label>
                                 </div>
                             </div>
@@ -663,15 +744,24 @@
 
                     <div class="flex items-center gap-2">
                         <button onclick="abrirModalWhatsApp()"
-                            class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition-colors">
-                            <i class="fa-brands fa-whatsapp text-sm"></i> Gerar Envio WhatsApp
+                            class="bg-emerald-600 hover:bg-emerald-900 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition-colors">
+                            <i class="fa-brands fa-whatsapp text-sm"></i> Modelo WhatsApp
+                        </button>
+                        <button onclick="gerarWord()"
+                            class="bg-blue-700 hover:bg-blue-800 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition-colors">
+                            <i class="fa-solid fa-file-word"></i> Gerar Word
+                        </button>
+                        <button onclick="gerarExcel()"
+                            class="bg-green-700 hover:bg-green-800 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition-colors">
+                            <i class="fa-solid fa-file-excel"></i> Gerar Excel
                         </button>
                         <button onclick="window.print()"
-                            class="bg-slate-800 hover:bg-slate-900 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-sm">
+                            class="bg-slate-600 hover:bg-slate-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-sm">
                             <i class="fa-solid fa-print"></i> Imprimir / PDF
                         </button>
                         <button onclick="mudarAba('filtro')"
-                            class="bg-vinho-800 hover:bg-vinho-900 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5">
+                            class="text-black font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5"
+                            style="background-color:#e6e6e6;">
                             <i class="fa-solid fa-sliders"></i> Alterar Filtros
                         </button>
                     </div>
@@ -886,8 +976,6 @@
             document.getElementById('filtroFaseEtapa').value = 'Todos';
             document.getElementById('filtroPrioridade').value = 'Todos';
             document.getElementById('filtroTags').value = 'Todos';
-            document.getElementById('filtroDashboard').value = 'DESCONSIDERAR';
-            document.getElementById('filtroImportacoes').value = 'Todos';
             marcarTodosCampos(true);
         }
 
@@ -930,7 +1018,10 @@
             });
 
             const thead = document.getElementById('tableHeader');
-            thead.innerHTML = colunasSelecionadas.map(col => `<th class="p-2.5 border-b border-vinho-900 whitespace-nowrap">${colunasInfo[col]}</th>`).join('');
+            thead.innerHTML = colunasSelecionadas.map(col => `<th class="p-2.5 text-white border-b border-red-900 whitespace-nowrap" style="background-color:#9b0102;">
+        ${colunasInfo[col]}
+    </th>`
+).join('');
 
             const tbody = document.getElementById('tableBody');
             if (dadosFiltradosGlobais.length === 0) {
@@ -1020,6 +1111,47 @@
             const feedback = document.getElementById('feedbackCopia');
             feedback.classList.remove('hidden');
             setTimeout(() => feedback.classList.add('hidden'), 3000);
+        }
+
+        function gerarWord() {
+            if (dadosFiltradosGlobais.length === 0) {
+                alert('Nenhum dado encontrado para gerar o arquivo Word!');
+                return;
+            }
+
+            const tabela = document.querySelector('#tableHeader').closest('table').outerHTML;
+            const resumo = document.getElementById('resumoFiltrosText').textContent;
+            const dataGeracao = document.getElementById('dataGeracao').textContent;
+            const conteudoWord = `<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório de Pleitos</title>
+    <style>
+        body { font-family: Arial, sans-serif; font-size: 10pt; }
+        h1 { color: #9b0102; font-size: 16pt; }
+        p { color: #555; font-size: 9pt; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background-color: #9b0102 !important; color: #fff; padding: 7px; text-align: left; border: 1px solid #777; }
+        td { padding: 6px; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+    <h1>Relatório de Pleitos</h1>
+    <p>${resumo}</p>
+    <p>Gerado em: ${dataGeracao}</p>
+    ${tabela}
+</body>
+</html>`;
+
+            const blob = new Blob([conteudoWord], { type: 'application/msword' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'relatorio_pleitos.doc';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
         }
 
         function downloadSelf() {
